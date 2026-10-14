@@ -29,6 +29,7 @@ export interface NoteEl {
   tuplet?: { actual: number; normal: number };
   measure: number;
   fullRest?: boolean; // pausa de compasso inteiro
+  hidden?: boolean; // pausa invisível (preenchimento de voz secundária)
 }
 
 export interface Measure {

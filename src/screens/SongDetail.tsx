@@ -1,0 +1,128 @@
+import { useEffect, useState } from 'react';
+import { getSong } from '../data/library';
+import type { Song } from '../music/types';
+import { studyPlan, stepUrl } from '../practice/plan';
+import { useStore } from '../lib/store';
+import { progress } from '../state/progress';
+import { settings } from '../state/settings';
+import { Score } from '../components/score/Score';
+import { Icon, LevelDots } from '../components/Icon';
+import { ProgressBar } from '../components/ui';
+import { back, navigate } from '../lib/router';
+import { handsInSong } from '../music/timeline';
+import { keySigName } from '../music/theory';
+
+export default function SongDetail({ id }: { id: string }) {
+  const [song, setSong] = useState<Song | null | undefined>(undefined);
+  useEffect(() => {
+    getSong(id).then((s) => setSong(s ?? null));
+  }, [id]);
+  if (song === undefined) return <div className="empty">Carregando…</div>;
+  if (!song) return <div className="empty">Música não encontrada.</div>;
+  return <SongDetailInner song={song} />;
+}
+
+function SongDetailInner({ song }: { song: Song }) {
+  const p = useStore(progress);
+  const st = useStore(settings);
+  const sp = p.songs[song.id];
+  const plan = studyPlan(song);
+  const doneKeys = new Set(
+    Object.entries(sp?.steps ?? {})
+      .filter(([k, v]) => v >= (plan.steps.find((s) => s.key === k)?.target ?? 0.8))
+      .map(([k]) => k),
+  );
+  const nextIdx = plan.steps.findIndex((s) => !doneKeys.has(s.key));
+  const hands = handsInSong(song);
+  const pct = doneKeys.size / plan.steps.length;
+
+  return (
+    <div>
+      <div className="page-header">
+        <button className="btn ghost icon" onClick={() => back('/musicas')} aria-label="Voltar">
+          <Icon name="back" />
+        </button>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <h1>{song.title}</h1>
+          <div className="muted small">{song.composer}</div>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="row" style={{ marginBottom: 10 }}>
+          <LevelDots level={song.level} />
+          <span className="chip">{hands.length === 2 ? 'Duas mãos' : hands[0] === 'R' ? 'Mão direita' : 'Mão esquerda'}</span>
+          <span className="chip">
+            {song.timeSig[0]}/{song.timeSig[1]}
+          </span>
+          <span className="chip">{keySigName(song.keySig, st.naming)}</span>
+          <span className="chip">{song.tempo} bpm</span>
+          <span className="chip">{song.measures.length} compassos</span>
+        </div>
+        {song.description && <p className="muted">{song.description}</p>}
+        <div className="row">
+          <button className="btn primary" onClick={() => navigate(nextIdx >= 0 ? stepUrl(song.id, plan.steps[nextIdx]) : `/tocar/${encodeURIComponent(song.id)}`)}>
+            <Icon name="play" /> {nextIdx > 0 ? 'Continuar plano' : nextIdx === 0 ? 'Começar plano de estudo' : 'Tocar'}
+          </button>
+          <button className="btn" onClick={() => navigate(`/tocar/${encodeURIComponent(song.id)}?mode=listen`)}>
+            <Icon name="ear" /> Ouvir
+          </button>
+          <button className="btn" onClick={() => navigate(`/tocar/${encodeURIComponent(song.id)}`)}>
+            <Icon name="sliders" /> Prática livre
+          </button>
+        </div>
+        {sp && (
+          <p className="small muted" style={{ marginTop: 10, marginBottom: 0 }}>
+            Melhor resultado: {Math.round(sp.best * 100)}% · tocada {sp.plays} {sp.plays === 1 ? 'vez' : 'vezes'}
+            {sp.bestTempo ? ` · andamento alcançado: ${sp.bestTempo}%` : ''}
+          </p>
+        )}
+      </div>
+
+      <div className="section-title">
+        <h2>Plano de estudo</h2>
+        <span className="muted small">{Math.round(pct * 100)}%</span>
+      </div>
+      <ProgressBar value={pct} />
+      <p className="small muted" style={{ marginTop: 8 }}>
+        Dividimos a música em {plan.sections.length > 1 ? `${plan.sections.length} trechos` : 'um trecho'}. Em cada um: ouvir, mãos separadas sem
+        pressa, mãos juntas e só depois no tempo. Repetições curtas e lentas fixam melhor do que tocar tudo rápido.
+      </p>
+      <div className="stack">
+        {plan.steps.map((s, i) => {
+          const done = doneKeys.has(s.key);
+          const best = sp?.steps[s.key];
+          const header = s.section !== undefined && plan.sections.length > 1 && (i === 0 || plan.steps[i - 1].section !== s.section);
+          return (
+            <div key={s.key}>
+              {header && (
+                <div className="small muted" style={{ fontWeight: 700, margin: '8px 0 6px' }}>
+                  Trecho {s.section! + 1} — compassos {plan.sections[s.section!][0] + 1} a {plan.sections[s.section!][1] + 1}
+                </div>
+              )}
+              {!header && s.section === undefined && plan.steps[i - 1]?.section !== undefined && (
+                <div className="small muted" style={{ fontWeight: 700, margin: '8px 0 6px' }}>
+                  Música inteira
+                </div>
+              )}
+              <button className={'plan-step' + (done ? ' done' : '') + (i === nextIdx ? ' current' : '')} onClick={() => navigate(stepUrl(song.id, s))}>
+                <span className="num">{done ? <Icon name="check" size={16} /> : i + 1}</span>
+                <span style={{ flex: 1 }}>
+                  <b>{s.title}</b>
+                  <div className="small muted">{s.desc}</div>
+                </span>
+                {best !== undefined && s.mode !== 'listen' && <span className={'chip ' + (done ? 'ok' : '')}>{Math.round(best * 100)}%</span>}
+                <Icon name="next" size={18} />
+              </button>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="section-title">
+        <h2>Partitura</h2>
+      </div>
+      <Score song={song} options={{ showNames: st.showNoteNames, naming: st.naming }} autoScroll={false} />
+    </div>
+  );
+}
