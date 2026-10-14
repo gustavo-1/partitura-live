@@ -142,3 +142,55 @@ export function recordNoteRead(key: string, correct: boolean, ms: number) {
 export function minutesToday(p: Progress): number {
   return Math.round((p.practice[today()] ?? 0) / 60);
 }
+
+/** Mescla progresso de dois aparelhos sem perder nada (sempre fica com o melhor/maior). */
+export function mergeProgress(a: Progress, b: Progress): Progress {
+  const lessons: Progress['lessons'] = { ...a.lessons };
+  for (const [k, v] of Object.entries(b.lessons ?? {})) {
+    const x = lessons[k];
+    lessons[k] = x
+      ? {
+          stars: Math.max(x.stars, v.stars),
+          best: Math.max(x.best, v.best),
+          attempts: Math.max(x.attempts, v.attempts),
+          completedAt: Math.min(x.completedAt ?? Infinity, v.completedAt ?? Infinity) === Infinity ? undefined : Math.min(x.completedAt ?? Infinity, v.completedAt ?? Infinity),
+        }
+      : v;
+  }
+  const songs: Progress['songs'] = { ...a.songs };
+  for (const [k, v] of Object.entries(b.songs ?? {})) {
+    const x = songs[k];
+    if (!x) {
+      songs[k] = v;
+      continue;
+    }
+    const steps = { ...x.steps };
+    for (const [sk, sv] of Object.entries(v.steps ?? {})) steps[sk] = Math.max(steps[sk] ?? 0, sv);
+    songs[k] = {
+      best: Math.max(x.best, v.best),
+      plays: Math.max(x.plays, v.plays),
+      lastPlayed: Math.max(x.lastPlayed, v.lastPlayed),
+      steps,
+      bestTempo: Math.max(x.bestTempo ?? 0, v.bestTempo ?? 0) || undefined,
+    };
+  }
+  const noteStats: Progress['noteStats'] = { ...a.noteStats };
+  for (const [k, v] of Object.entries(b.noteStats ?? {})) {
+    const x = noteStats[k];
+    noteStats[k] = !x || v.seen > x.seen || (v.seen === x.seen && v.last > x.last) ? v : x;
+  }
+  const practice: Progress['practice'] = { ...a.practice };
+  for (const [k, v] of Object.entries(b.practice ?? {})) practice[k] = Math.max(practice[k] ?? 0, v);
+  const sa = a.streak;
+  const sb = b.streak ?? sa;
+  const streak = sa.lastDay >= sb.lastDay ? { ...sa, best: Math.max(sa.best, sb.best) } : { ...sb, best: Math.max(sa.best, sb.best) };
+  return {
+    lessons,
+    songs,
+    noteStats,
+    practice,
+    xp: Math.max(a.xp, b.xp ?? 0),
+    streak,
+    updatedAt: Math.max(a.updatedAt, b.updatedAt ?? 0),
+  };
+}

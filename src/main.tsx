@@ -17,3 +17,10 @@ if ('serviceWorker' in navigator && import.meta.env.PROD) {
     });
   });
 }
+
+// depuração (somente em desenvolvimento)
+if (import.meta.env.DEV) {
+  void Promise.all([import('./audio/mic'), import('./audio/input')]).then(([m, i]) => {
+    (window as unknown as Record<string, unknown>).__pl = { mic: m.mic, input: i.input };
+  });
+}

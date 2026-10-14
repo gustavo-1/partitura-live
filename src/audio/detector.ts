@@ -221,22 +221,24 @@ export class NoteDetector {
     const pEnergy = new Float64Array(nc * RISE_PARTIALS);
     const energy = new Float64Array(nc);
 
+    // a FFT é sempre calculada: o histórico de energia precisa refletir o sinal real,
+    // inclusive nos silêncios curtos entre notas (senão todo ataque parece re-toque)
+    this.fftLong.magnitudes(buf, this.winLong, this.magLong, off);
+    for (let i = 0; i < nc; i++) {
+      const ps = this.cands[i].partials;
+      let e = 0;
+      for (let h = 0; h < ps.length && h < 6; h++) {
+        let mx = 0;
+        for (let k = ps[h].lo; k <= ps[h].hi; k++) if (this.magLong[k] > mx) mx = this.magLong[k];
+        e += mx * mx;
+        if (h < RISE_PARTIALS) pEnergy[i * RISE_PARTIALS + h] = mx * mx;
+      }
+      energy[i] = e;
+    }
     if (!gated) {
-      this.fftLong.magnitudes(buf, this.winLong, this.magLong, off);
       this.whiten();
       detected = this.estimate();
       if (detected.length) top = this.refineTop(detected[0]);
-      for (let i = 0; i < nc; i++) {
-        const ps = this.cands[i].partials;
-        let e = 0;
-        for (let h = 0; h < ps.length && h < 6; h++) {
-          let mx = 0;
-          for (let k = ps[h].lo; k <= ps[h].hi; k++) if (this.magLong[k] > mx) mx = this.magLong[k];
-          e += mx * mx;
-          if (h < RISE_PARTIALS) pEnergy[i * RISE_PARTIALS + h] = mx * mx;
-        }
-        energy[i] = e;
-      }
     } else {
       this.salNorm.fill(0);
     }

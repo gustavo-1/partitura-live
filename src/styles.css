@@ -1163,8 +1163,22 @@ input[type='range'] {
   font-size: 120px;
   opacity: 0.12;
   line-height: 1;
-  font-family: Bravura, serif;
+  font-family: serif;
   pointer-events: none;
+}
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-top: 16px;
+}
+.kpis .card {
+  padding: 12px;
+}
+@media (max-width: 520px) {
+  .kpis .kpi b {
+    font-size: 17px;
+  }
 }
 .kpi {
   display: flex;
@@ -1345,4 +1359,45 @@ kbd {
   border-bottom-width: 2px;
   border-radius: 6px;
   background: var(--surface-2);
+}
+
+@media (max-width: 560px) {
+  .hide-narrow {
+    display: none !important;
+  }
+  .player-top {
+    padding: 6px 8px;
+    gap: 6px;
+  }
+  .player-top .seg button {
+    padding: 6px 9px;
+    font-size: 13px;
+  }
+  .player-controls {
+    gap: 6px;
+    padding: 6px 8px;
+  }
+  .player-controls .btn {
+    padding: 8px 12px;
+  }
+  .player-score {
+    padding: 6px;
+  }
+}
+.welcome-step {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin: 12px 0;
+}
+.welcome-step .num {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  flex-shrink: 0;
 }

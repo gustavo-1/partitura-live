@@ -31,6 +31,8 @@ export interface ScoreOptions {
   /** uma única linha (para exercícios curtos) */
   singleLine?: boolean;
   title?: boolean;
+  /** sem fórmula de compasso, número de compasso e barra final (cartões de leitura) */
+  bare?: boolean;
 }
 
 export interface NoteBox {
@@ -115,7 +117,7 @@ export function renderScore(container: HTMLElement, song: Song, opts: ScoreOptio
 
   // largura extra do início de cada sistema (clave + armadura + compasso)
   const keyAcc = Math.abs(song.keySig);
-  const headerW = (first: boolean) => 38 + keyAcc * 10 + (first ? 26 : 0);
+  const headerW = (first: boolean) => 38 + keyAcc * 10 + (first && !opts.bare ? 26 : 0);
 
   // quebra em sistemas
   const systemsM: Measure[][] = [];
@@ -196,13 +198,13 @@ export function renderScore(container: HTMLElement, song: Song, opts: ScoreOptio
         if (first) {
           st.addClef(clefs[pos]);
           st.addKeySignature(keySigToVex(m.keySig));
-          if (isFirstSystem || m.timeSigChange) st.addTimeSignature(`${m.timeSig[0]}/${m.timeSig[1]}`);
+          if ((isFirstSystem || m.timeSigChange) && !opts.bare) st.addTimeSignature(`${m.timeSig[0]}/${m.timeSig[1]}`);
         } else {
           if (m.keySigChange) st.addKeySignature(keySigToVex(m.keySig));
           if (m.timeSigChange) st.addTimeSignature(`${m.timeSig[0]}/${m.timeSig[1]}`);
         }
-        if (m.index === song.measures.length - 1) st.setEndBarType(Barline.type.END);
-        if (first && pos === 0) st.setMeasure(m.index + 1);
+        if (m.index === song.measures.length - 1) st.setEndBarType(opts.bare ? Barline.type.NONE : Barline.type.END);
+        if (first && pos === 0 && !opts.bare) st.setMeasure(m.index + 1);
         void s;
         return st;
       });
@@ -221,7 +223,7 @@ export function renderScore(container: HTMLElement, song: Song, opts: ScoreOptio
           new StaveConnector(staves[0], staves[staves.length - 1]).setType('singleLeft').setContext(ctx).draw();
         }
         const endType = m.index === song.measures.length - 1 ? 'boldDoubleRight' : 'singleRight';
-        new StaveConnector(staves[0], staves[staves.length - 1]).setType(endType).setContext(ctx).draw();
+        if (!opts.bare) new StaveConnector(staves[0], staves[staves.length - 1]).setType(endType).setContext(ctx).draw();
       }
 
       // vozes
@@ -275,6 +277,7 @@ export function renderScore(container: HTMLElement, song: Song, opts: ScoreOptio
               ticks += vEls[i].d;
               i++;
             }
+            if (!group.length) i++; // garantia contra laço infinito
             if (group.length > 1) tuplets.push(new Tuplet(group, { numNotes: tu.actual, notesOccupied: tu.normal }));
           }
           const len = m.length;

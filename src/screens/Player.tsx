@@ -386,7 +386,7 @@ function PlayerInner({ song, query }: { song: Song; query: URLSearchParams }) {
                 <b>{engine.stats.steps ? Math.round(acc * 100) + '%' : '—'}</b>
                 <span>precisão</span>
               </div>
-              <div className="stat">
+              <div className="stat hide-narrow">
                 <b>{engine.stats.streak}</b>
                 <span>sequência</span>
               </div>

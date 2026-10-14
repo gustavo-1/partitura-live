@@ -57,6 +57,7 @@ export function songFromChords(meta: SongMeta, staves: RawStaff[]): Song {
         const mEnd = (mi + 1) * mLen;
         const segEnd = Math.min(stop, mEnd);
         const segLen = segEnd - t;
+        if (segLen <= 0) break;
         if (!c && Math.abs(t - mi * mLen) < 1 && Math.abs(segLen - mLen) < 1) {
           pieces.push({ t, d: mLen, dur: 'w', dots: 0 });
           t = segEnd;

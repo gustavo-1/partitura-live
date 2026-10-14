@@ -6,24 +6,32 @@ export function setMetronomeVolume(v: number): void {
   volume = v;
 }
 
-/** Agenda um clique. `accent` = primeiro tempo do compasso. */
+let noise: AudioBuffer | null = null;
+
+/**
+ * Agenda um clique. `accent` = primeiro tempo do compasso.
+ * O clique é um ruído filtrado (tipo "woodblock"), sem altura definida, para que
+ * o detector de notas do microfone não o confunda com uma tecla.
+ */
 export function click(when: number, accent = false): void {
   if (volume <= 0) return;
   const ctx = audioCtx();
-  const o = ctx.createOscillator();
-  const g = ctx.createGain();
-  o.type = 'square';
-  o.frequency.value = accent ? 1760 : 1175;
-  g.gain.setValueAtTime(0, when);
-  g.gain.linearRampToValueAtTime(0.25 * volume * (accent ? 1 : 0.7), when + 0.002);
-  g.gain.exponentialRampToValueAtTime(0.0001, when + 0.05);
+  if (!noise) {
+    const len = Math.floor(ctx.sampleRate * 0.04);
+    noise = ctx.createBuffer(1, len, ctx.sampleRate);
+    const d = noise.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.exp(-i / (len * 0.18));
+  }
+  const src = ctx.createBufferSource();
+  src.buffer = noise;
   const f = ctx.createBiquadFilter();
   f.type = 'bandpass';
-  f.frequency.value = o.frequency.value;
-  f.Q.value = 2;
-  o.connect(f).connect(g).connect(ctx.destination);
-  o.start(when);
-  o.stop(when + 0.07);
+  f.frequency.value = accent ? 3200 : 2200;
+  f.Q.value = 1.2;
+  const g = ctx.createGain();
+  g.gain.value = 1.6 * volume * (accent ? 1 : 0.65);
+  src.connect(f).connect(g).connect(ctx.destination);
+  src.start(when);
 }
 
 /** Metrônomo independente (para a tela de ferramentas e exercícios de ritmo). */

@@ -298,9 +298,7 @@ export class PracticeEngine {
           const accent = inCount
             ? Math.round(b - (this.startTick - this.preRoll())) % mt === 0
             : this.song.measures.some((m) => m.start === Math.round(b));
-          const when = toCtx(b);
-          click(when, accent);
-          mic.suppress(when + 0.06);
+          click(toCtx(b), accent);
         }
       }
       this.metroUntil = Math.max(this.metroUntil, horizon);
@@ -356,11 +354,17 @@ export class PracticeEngine {
     const expected = step.events.map((x) => x.midi);
     if (expected.includes(e.midi)) {
       if (got.has(e.midi)) return;
-      got.add(e.midi);
+      // pelo microfone, notas em oitava/harmônico dentro do mesmo acorde são inseparáveis
+      // (ex.: Sol3 + Sol4): a detecção de uma vale para as duas
+      const also =
+        e.source === 'mic' ? expected.filter((m) => m !== e.midi && !got.has(m) && (isHarmonicOf(m, e.midi) || isHarmonicOf(e.midi, m))) : [];
+      for (const m of [e.midi, ...also]) {
+        got.add(m);
+        this.recentOk.push({ midi: m, time: e.time });
+        for (const ev of step.events) if (ev.midi === m) this.hitEvents.add(ev);
+      }
       this.stepHit.set(step.index, got);
-      this.recentOk.push({ midi: e.midi, time: e.time });
-      if (this.recentOk.length > 12) this.recentOk.shift();
-      for (const ev of step.events) if (ev.midi === e.midi) this.hitEvents.add(ev);
+      while (this.recentOk.length > 12) this.recentOk.shift();
       if (expected.every((m) => got.has(m))) this.completeStep(step);
       else {
         this.refreshMarks();
@@ -444,6 +448,15 @@ export class PracticeEngine {
     }
     if (best) {
       this.hitEvents.add(best);
+      if (e.source === 'mic') {
+        const step = this.steps.find((s) => s.events.includes(best!));
+        for (const ev of step?.events ?? []) {
+          if (ev !== best && !this.hitEvents.has(ev) && (isHarmonicOf(ev.midi, best.midi) || isHarmonicOf(best.midi, ev.midi))) {
+            this.hitEvents.add(ev);
+            this.stats.hits++;
+          }
+        }
+      }
       this.stats.hits++;
       this.stats.streak++;
       this.stats.bestStreak = Math.max(this.stats.bestStreak, this.stats.streak);

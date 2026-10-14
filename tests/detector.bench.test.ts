@@ -202,6 +202,30 @@ describe.skipIf(!enabled)('detector com amostras reais', { timeout: 120000 }, ()
     expect(r.hit / r.total).toBeGreaterThan(0.8);
   });
 
+  it('cliques do metrônomo (ruído filtrado) não viram notas', () => {
+    const sig = render([{ midi: 60, t: 0.4, dur: 3 }], 4, 0.0005);
+    // ressonador de 2 polos ~ filtro passa-banda em 2,2 kHz / 3,2 kHz, como no app
+    for (let k = 0; k < 7; k++) {
+      const f = k % 4 === 0 ? 3200 : 2200;
+      const r = 0.97;
+      const w = (2 * Math.PI * f) / SR;
+      let y1 = 0;
+      let y2 = 0;
+      const start = Math.floor((0.5 + k * 0.5) * SR);
+      for (let i = 0; i < 0.04 * SR; i++) {
+        const x = (rnd() * 2 - 1) * Math.exp(-i / (0.04 * SR * 0.18)) * 0.25;
+        const y = x + 2 * r * Math.cos(w) * y1 - r * r * y2;
+        y2 = y1;
+        y1 = y;
+        sig[start + i] += y * 0.05;
+      }
+    }
+    const on = run(sig);
+    console.log(`cliques: ${on.map((o) => `${o.midi}@${o.time.toFixed(2)}`).join(', ')}`);
+    expect(on.filter((o) => o.midi !== 60).length).toBe(0);
+    expect(on.filter((o) => o.midi === 60).length).toBe(1);
+  });
+
   it('ruído não gera notas', () => {
     const sig = render([], 3, 0.02);
     const r = run(sig);

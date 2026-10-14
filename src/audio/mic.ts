@@ -47,8 +47,18 @@ class MicListener {
     if (this.detector) this.detector.sensitivity = v;
   }
 
-  async start(): Promise<boolean> {
-    if (this.state === 'on') return true;
+  private pending: Promise<boolean> | null = null;
+
+  start(): Promise<boolean> {
+    if (this.state === 'on') return Promise.resolve(true);
+    if (this.pending) return this.pending;
+    this.pending = this.doStart().finally(() => {
+      this.pending = null;
+    });
+    return this.pending;
+  }
+
+  private async doStart(): Promise<boolean> {
     if (!this.supported) {
       this.setState('unsupported');
       return false;

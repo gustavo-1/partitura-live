@@ -14,6 +14,7 @@ import { PracticeHub } from './screens/PracticeHub';
 import { ProgressScreen } from './screens/ProgressScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { startSync } from './lib/sync';
+import { Welcome } from './screens/Welcome';
 
 const Player = lazy(() => import('./screens/Player'));
 const LessonScreen = lazy(() => import('./screens/LessonScreen'));
@@ -22,7 +23,6 @@ const NoteDrill = lazy(() => import('./screens/NoteDrill'));
 const RhythmDrill = lazy(() => import('./screens/RhythmDrill'));
 const DetectorScreen = lazy(() => import('./screens/DetectorScreen'));
 const SightReading = lazy(() => import('./screens/SightReading'));
-const DevScreen = lazy(() => import('./screens/DevScreen'));
 
 const NAV: { path: string; label: string; icon: IconName }[] = [
   { path: '/', label: 'Início', icon: 'home' },
@@ -91,9 +91,6 @@ export function App() {
     case 'config':
       page = <SettingsScreen />;
       break;
-    case 'dev':
-      page = <DevScreen />;
-      break;
     default:
       page = <Home />;
   }
@@ -131,6 +128,7 @@ export function App() {
       <main className={'main' + (full ? ' full' : '')}>
         <Suspense fallback={<div className="empty">Carregando…</div>}>{page}</Suspense>
       </main>
+      {!s.onboarded && <Welcome />}
       {!full && (
         <nav className="bottom-nav" aria-label="Navegação">
           {navLinks}
