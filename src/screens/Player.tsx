@@ -18,6 +18,26 @@ import { back, navigate } from '../lib/router';
 import { keyboardRange, settings } from '../state/settings';
 import { logPractice, recordSong, starsFor } from '../state/progress';
 import { normalizeRange } from '../components/keyboardLayout';
+import { account } from '../lib/account';
+import { sendChallenge, sendText, social } from '../lib/social';
+import { FriendPicker } from '../components/FriendPicker';
+
+interface Challenge {
+  songId: string;
+  from: string;
+  fromName: string;
+  score: number;
+}
+
+function readChallenge(songId: string, query: URLSearchParams): Challenge | null {
+  if (query.get('desafio') !== '1') return null;
+  try {
+    const c = JSON.parse(sessionStorage.getItem('pl.challenge') ?? 'null') as Challenge | null;
+    return c && c.songId === songId ? c : null;
+  } catch {
+    return null;
+  }
+}
 
 type View = 'sheet' | 'fall' | 'both';
 
@@ -81,6 +101,7 @@ function PlayerInner({ song, query }: { song: Song; query: URLSearchParams }) {
   const [showOpts, setShowOpts] = useState(false);
   const [result, setResult] = useState<PassResult | null>(null);
   const [selecting, setSelecting] = useState<number | null | 'start'>(null);
+  const [challenge] = useState(() => readChallenge(song.id, query));
   const timeRef = useRef(0);
   const fallState = useRef(new Map<string, FallState>());
 
@@ -139,14 +160,14 @@ function PlayerInner({ song, query }: { song: Song; query: URLSearchParams }) {
   // fim da música
   useEffect(() => {
     engine.onFinish = (r) => {
-      if (r.mode !== 'listen') recordSong(song.id, stepKey, r.accuracy, Math.round(r.tempoFactor * 100), r.full && r.hands.length === avail.length);
-      else if (stepKey) recordSong(song.id, stepKey, 1, Math.round(r.tempoFactor * 100), false);
+      if (r.mode !== 'listen') recordSong(song.id, stepKey, r.accuracy, Math.round(r.tempoFactor * 100), r.full && r.hands.length === avail.length, song.title);
+      else if (stepKey) recordSong(song.id, stepKey, 1, Math.round(r.tempoFactor * 100), false, song.title);
       setResult(r);
     };
     return () => {
       engine.onFinish = undefined;
     };
-  }, [engine, song.id, stepKey, avail.length]);
+  }, [engine, song.id, song.title, stepKey, avail.length]);
 
   // estado das notas na cascata
   for (const ev of engine.events) {
@@ -289,6 +310,15 @@ function PlayerInner({ song, query }: { song: Song; query: URLSearchParams }) {
         </button>
       </div>
 
+      {challenge && (
+        <div className="banner small challenge-banner">
+          <span style={{ fontSize: 18 }}>⚔️</span>
+          <div>
+            Desafio de <b>{challenge.fromName}</b>: supere <b>{Math.round(challenge.score * 100)}%</b> tocando a música inteira, com todas as partes
+            (no andamento que quiser).
+          </div>
+        </div>
+      )}
       <div className="player-body">
         <div className="player-feedback" aria-live="polite">
           {fb && (
@@ -464,6 +494,7 @@ function PlayerInner({ song, query }: { song: Song; query: URLSearchParams }) {
             }
             planHref={stepKey ? `/musica/${encodeURIComponent(song.id)}` : null}
             lessonReturn={lessonReturn}
+            challenge={challenge}
           />
         )}
       </Sheet>
@@ -479,6 +510,7 @@ function ResultView({
   next,
   planHref,
   lessonReturn,
+  challenge,
 }: {
   result: PassResult;
   song: Song;
@@ -487,7 +519,15 @@ function ResultView({
   next: { label: string; href: string } | null;
   planHref: string | null;
   lessonReturn: string | null;
+  challenge: Challenge | null;
 }) {
+  const acc = useStore(account);
+  const soc = useStore(social);
+  const [picker, setPicker] = useState(false);
+  const [sentMsg, setSentMsg] = useState<string | null>(null);
+  const complete = result.full && result.hands.length === handsInSong(song).length;
+  const canSocial = acc.status === 'signed-in' && result.mode !== 'listen' && complete;
+  const beat = challenge && complete ? result.accuracy > challenge.score : false;
   const stars = result.mode === 'listen' ? 3 : starsFor(result.accuracy);
   const worst = Object.entries(result.measureErrors)
     .sort((a, b) => b[1] - a[1])
@@ -506,7 +546,6 @@ function ResultView({
           : result.accuracy >= 0.6
             ? 'Está chegando lá!'
             : 'Continue praticando — devagar se vai longe.';
-  void song;
   return (
     <div className="result-hero">
       <Stars n={stars} />
@@ -543,7 +582,42 @@ function ResultView({
           </button>
         </div>
       )}
+      {challenge && result.mode !== 'listen' && (
+        <div className={'banner small' + (beat ? '' : ' warn')} style={{ textAlign: 'left', margin: '10px 0' }}>
+          <span style={{ fontSize: 20 }}>{beat ? '🏆' : '⚔️'}</span>
+          <div style={{ flex: 1 }}>
+            {!complete
+              ? `Para valer o desafio, toque a música inteira com todas as partes (sem escolher trecho nem só uma mão).`
+              : beat
+                ? `Você superou o desafio de ${challenge.fromName} (${Math.round(challenge.score * 100)}%)!`
+                : `Faltou pouco: ${challenge.fromName} fez ${Math.round(challenge.score * 100)}%. Tente de novo!`}
+          </div>
+          {complete && (
+            <button
+              className="btn sm"
+              disabled={!!sentMsg}
+              onClick={() => {
+                void sendText(
+                  challenge.from,
+                  beat
+                    ? `Topei seu desafio em “${song.title}” e fiz ${Math.round(result.accuracy * 100)}%! 🏆`
+                    : `Tentei seu desafio em “${song.title}”: fiz ${Math.round(result.accuracy * 100)}%. Vou tentar de novo! 💪`,
+                );
+                setSentMsg('Resultado enviado!');
+              }}
+            >
+              {sentMsg ?? `Contar para ${challenge.fromName.split(' ')[0]}`}
+            </button>
+          )}
+        </div>
+      )}
       <div className="stack" style={{ marginTop: 16 }}>
+        {canSocial && soc.friendIds.length > 0 && (
+          <button className="btn block" onClick={() => setPicker(true)}>
+            ⚔️ Desafiar um amigo a superar {Math.round(result.accuracy * 100)}%
+          </button>
+        )}
+        {sentMsg && !challenge && <p className="small" style={{ color: 'var(--ok)', margin: 0 }}>{sentMsg}</p>}
         {next && (
           <button className="btn primary lg block" onClick={() => navigate(next.href)}>
             Próxima etapa: {next.label} <Icon name="next" />
@@ -563,6 +637,15 @@ function ResultView({
           </button>
         )}
       </div>
+      <FriendPicker
+        open={picker}
+        title="Desafiar qual amigo?"
+        onClose={() => setPicker(false)}
+        onPick={(uid) => {
+          setPicker(false);
+          void sendChallenge(uid, song, result.accuracy).then(() => setSentMsg(`Desafio enviado para ${soc.friends[uid]?.name ?? 'seu amigo'}! ⚔️`));
+        }}
+      />
     </div>
   );
 }

@@ -1,9 +1,107 @@
 rules_version = '2';
-// Cada usuário só lê e escreve o próprio documento de progresso (users/{uid}).
+
+// Regras de segurança do Partitura Live.
+//  users/{uid}            dados privados (progresso, preferências) — só o dono
+//  users/{uid}/songs      músicas importadas — só o dono
+//  users/{uid}/inbox      mensagens recebidas — o dono lê/apaga/marca lida; amigos podem criar
+//  profiles/{uid}         resumo público — qualquer usuário logado lê UM perfil (sem listar); só o dono escreve
+//  friendCodes/{code}     código de amigo -> uid — consulta por código (sem listar)
+//  friendRequests/{a_b}   pedido de a para b
+//  friendships/{a_b}      amizade (uids em ordem alfabética)
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+    function me() {
+      return request.auth.uid;
+    }
+    function pairId(a, b) {
+      return a < b ? a + '_' + b : b + '_' + a;
+    }
+    function isFriend(other) {
+      return exists(/databases/$(database)/documents/friendships/$(pairId(me(), other)));
+    }
+    function shortString(v, max) {
+      return v is string && v.size() <= max;
+    }
+    function optShortString(data, field, max) {
+      return !(field in data) || data[field] == null || shortString(data[field], max);
+    }
+
+    // ---------- dados privados ----------
     match /users/{uid} {
-      allow read, write: if request.auth != null && request.auth.uid == uid;
+      allow read, write: if signedIn() && me() == uid;
+
+      match /songs/{songId} {
+        allow read, write: if signedIn() && me() == uid;
+      }
+
+      match /inbox/{msgId} {
+        allow read, delete: if signedIn() && me() == uid;
+        // o dono só pode marcar como lida
+        allow update: if signedIn() && me() == uid
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
+        // amigos enviam mensagens assinadas por eles mesmos
+        allow create: if signedIn()
+          && me() != uid
+          && isFriend(uid)
+          && request.resource.data.from == me()
+          && request.resource.data.keys().hasOnly(['from', 'fromName', 'fromPhoto', 'fromAvatar', 'type', 'text', 'songId', 'songTitle', 'score', 'data', 'createdAt', 'read'])
+          && request.resource.data.type in ['cheer', 'challenge', 'song', 'text']
+          && shortString(request.resource.data.fromName, 60)
+          && optShortString(request.resource.data, 'text', 300)
+          && optShortString(request.resource.data, 'songTitle', 160)
+          && optShortString(request.resource.data, 'songId', 200)
+          && request.resource.data.read == false;
+      }
+    }
+
+    // ---------- perfil público ----------
+    match /profiles/{uid} {
+      allow get: if signedIn();
+      allow list: if false;
+      allow create, update: if signedIn() && me() == uid
+        && request.resource.data.uid == uid
+        && shortString(request.resource.data.name, 60)
+        && shortString(request.resource.data.code, 12);
+      allow delete: if signedIn() && me() == uid;
+    }
+
+    // ---------- código de amigo ----------
+    match /friendCodes/{code} {
+      allow get: if signedIn();
+      allow list: if false;
+      // só cria (não sobrescreve código de outra pessoa)
+      allow create: if signedIn() && request.resource.data.uid == me() && code.size() == 6;
+      allow delete: if signedIn() && resource.data.uid == me();
+    }
+
+    // ---------- pedidos de amizade (id = remetente_destinatário) ----------
+    match /friendRequests/{id} {
+      allow read: if signedIn() && (resource.data.from == me() || resource.data.to == me());
+      allow create: if signedIn()
+        && request.resource.data.from == me()
+        && request.resource.data.to is string
+        && request.resource.data.to != me()
+        && id == me() + '_' + request.resource.data.to
+        && shortString(request.resource.data.fromName, 60);
+      allow delete: if signedIn() && (resource.data.from == me() || resource.data.to == me());
+    }
+
+    // ---------- amizades ----------
+    match /friendships/{id} {
+      allow read: if signedIn() && me() in resource.data.members;
+      // quem recebeu o pedido aceita; o pedido precisa existir
+      allow create: if signedIn()
+        && request.resource.data.members is list
+        && request.resource.data.members.size() == 2
+        && me() in request.resource.data.members
+        && id == pairId(request.resource.data.members[0], request.resource.data.members[1])
+        && exists(/databases/$(database)/documents/friendRequests/$(
+             (request.resource.data.members[0] == me() ? request.resource.data.members[1] : request.resource.data.members[0]) + '_' + me()));
+      allow delete: if signedIn() && me() in resource.data.members;
     }
   }
 }

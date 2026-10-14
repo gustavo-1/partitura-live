@@ -11,10 +11,12 @@ import { Home } from './screens/Home';
 import { PathScreen } from './screens/PathScreen';
 import { Library } from './screens/Library';
 import { PracticeHub } from './screens/PracticeHub';
-import { ProgressScreen } from './screens/ProgressScreen';
+import { ProfileScreen } from './screens/ProfileScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
-import { startSync } from './lib/sync';
+import { startAccount } from './lib/account';
+import { social } from './lib/social';
 import { Welcome } from './screens/Welcome';
+import { BadgeToast } from './components/BadgeToast';
 
 const Player = lazy(() => import('./screens/Player'));
 const LessonScreen = lazy(() => import('./screens/LessonScreen'));
@@ -23,18 +25,22 @@ const NoteDrill = lazy(() => import('./screens/NoteDrill'));
 const RhythmDrill = lazy(() => import('./screens/RhythmDrill'));
 const DetectorScreen = lazy(() => import('./screens/DetectorScreen'));
 const SightReading = lazy(() => import('./screens/SightReading'));
+const FriendsScreen = lazy(() => import('./screens/FriendsScreen'));
+const FriendProfile = lazy(() => import('./screens/FriendProfile'));
 
 const NAV: { path: string; label: string; icon: IconName }[] = [
   { path: '/', label: 'Início', icon: 'home' },
   { path: '/trilha', label: 'Trilha', icon: 'path' },
   { path: '/musicas', label: 'Músicas', icon: 'music' },
   { path: '/treino', label: 'Treino', icon: 'target' },
-  { path: '/progresso', label: 'Progresso', icon: 'chart' },
+  { path: '/amigos', label: 'Amigos', icon: 'users' },
 ];
 
 export function App() {
   const route = useRoute();
   const s = useStore(settings);
+  const soc = useStore(social);
+  const socialBadge = soc.incoming.length + soc.unread;
 
   useEffect(() => {
     const root = document.documentElement;
@@ -51,7 +57,7 @@ export function App() {
   }, [s.computerKeyboard, s.pianoVolume, s.metronomeVolume, s.micSensitivity, s.latencyMs]);
 
   useEffect(() => {
-    startSync();
+    void startAccount();
   }, [s.firebaseConfig]);
 
   const [first, second] = route.parts;
@@ -86,7 +92,14 @@ export function App() {
       else page = <PracticeHub />;
       break;
     case 'progresso':
-      page = <ProgressScreen />;
+    case 'perfil':
+      page = <ProfileScreen />;
+      break;
+    case 'amigos':
+      page = <FriendsScreen query={route.query} />;
+      break;
+    case 'amigo':
+      page = <FriendProfile uid={second ?? ''} />;
       break;
     case 'config':
       page = <SettingsScreen />;
@@ -95,13 +108,15 @@ export function App() {
       page = <Home />;
   }
 
-  const activePath = '/' + (first === 'licao' ? 'trilha' : first === 'musica' ? 'musicas' : (first ?? ''));
+  const activePath =
+    '/' + (first === 'licao' ? 'trilha' : first === 'musica' ? 'musicas' : first === 'amigo' ? 'amigos' : first === 'progresso' ? 'perfil' : (first ?? ''));
   const navLinks = (
     <>
       {NAV.map((n) => (
         <a key={n.path} href={'#' + n.path} className={'nav-item' + (activePath === n.path ? ' active' : '')}>
           <Icon name={n.icon} />
           <span>{n.label}</span>
+          {n.path === '/amigos' && socialBadge > 0 && <span className="nav-badge">{socialBadge}</span>}
         </a>
       ))}
     </>
@@ -119,6 +134,10 @@ export function App() {
           </a>
           {navLinks}
           <div className="spacer" />
+          <a href="#/perfil" className={'nav-item' + (activePath === '/perfil' ? ' active' : '')}>
+            <Icon name="user" />
+            <span>Perfil e progresso</span>
+          </a>
           <a href="#/config" className={'nav-item' + (first === 'config' ? ' active' : '')}>
             <Icon name="settings" />
             <span>Configurações</span>
@@ -129,6 +148,7 @@ export function App() {
         <Suspense fallback={<div className="empty">Carregando…</div>}>{page}</Suspense>
       </main>
       {!s.onboarded && <Welcome />}
+      <BadgeToast />
       {!full && (
         <nav className="bottom-nav" aria-label="Navegação">
           {navLinks}

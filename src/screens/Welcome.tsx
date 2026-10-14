@@ -3,10 +3,13 @@ import { settings, type Settings } from '../state/settings';
 import { Seg, Sheet } from '../components/ui';
 import { Icon } from '../components/Icon';
 import { mic } from '../audio/mic';
+import { SignInBox } from '../components/AccountCard';
+import { account } from '../lib/account';
 
 /** Boas-vindas na primeira abertura: preferências básicas e microfone. */
 export function Welcome() {
   const s = useStore(settings);
+  const acc = useStore(account);
   const close = () => settings.set({ onboarded: true });
   return (
     <Sheet open onClose={close}>
@@ -64,6 +67,20 @@ export function Welcome() {
           </button>
         </div>
       </div>
+      {acc.status !== 'disabled' && (
+        <div className="welcome-step">
+          <span className="num">4</span>
+          <div style={{ flex: 1 }}>
+            <b>Salvar na nuvem (opcional)</b>
+            <p className="small muted" style={{ margin: '4px 0 6px' }}>
+              {acc.status === 'signed-in'
+                ? `Pronto! Conectado como ${acc.user?.name}. Seu progresso fica salvo na conta.`
+                : 'Sem conta, o progresso fica só neste aparelho. Com conta, ele vai para a nuvem, aparece em qualquer aparelho e você pode praticar com amigos.'}
+            </p>
+            {acc.status !== 'signed-in' && <SignInBox compact />}
+          </div>
+        </div>
+      )}
       <button className="btn primary lg block" style={{ marginTop: 10 }} onClick={close}>
         Começar
       </button>

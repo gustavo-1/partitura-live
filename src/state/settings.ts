@@ -20,6 +20,8 @@ export interface Settings {
   firebaseConfig: string;
   computerKeyboard: boolean;
   onboarded: boolean;
+  /** emoji escolhido como avatar (aparece para os amigos) */
+  avatar: string;
 }
 
 export const defaultSettings: Settings = {
@@ -37,6 +39,7 @@ export const defaultSettings: Settings = {
   firebaseConfig: '',
   computerKeyboard: true,
   onboarded: false,
+  avatar: '',
 };
 
 export const settings = createStore<Settings>('pl.settings', defaultSettings);

@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "deploy": "npm run build && firebase deploy --only hosting,firestore:rules"
+    "deploy": "npm run build && firebase deploy --only hosting,firestore:rules",
+    "test:rules": "firebase emulators:exec --only firestore --project demo-partitura \"vitest run tests/rules.test.ts\""
   },
   "dependencies": {
     "@tonejs/midi": "^2.0.28",
@@ -20,6 +21,7 @@
     "vexflow": "^5.0.0"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^6.0.0",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",

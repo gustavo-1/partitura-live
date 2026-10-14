@@ -24,16 +24,16 @@ function safeWrite(key: string, value: unknown) {
   }
 }
 
-/** Store simples persistido no localStorage. */
-export function createStore<T extends object>(key: string, initial: T): Store<T> {
-  let state: T = { ...initial, ...(safeRead<Partial<T>>(key) ?? {}) };
+/** Store simples persistido no localStorage (key = null: só em memória). */
+export function createStore<T extends object>(key: string | null, initial: T): Store<T> {
+  let state: T = { ...initial, ...((key ? safeRead<Partial<T>>(key) : null) ?? {}) };
   const listeners = new Set<() => void>();
   let timer: number | null = null;
   const persist = () => {
-    if (timer !== null) return;
+    if (!key || timer !== null) return;
     timer = window.setTimeout(() => {
       timer = null;
-      safeWrite(key, state);
+      safeWrite(key!, state);
     }, 250);
   };
   const emit = () => listeners.forEach((fn) => fn());

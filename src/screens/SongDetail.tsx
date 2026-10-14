@@ -11,6 +11,11 @@ import { ProgressBar } from '../components/ui';
 import { back, navigate } from '../lib/router';
 import { handsInSong } from '../music/timeline';
 import { keySigName } from '../music/theory';
+import { account } from '../lib/account';
+import { sendChallenge, sendSong, social } from '../lib/social';
+import { builtinSong } from '../data/songs';
+import { Avatar } from '../components/Avatar';
+import { FriendPicker } from '../components/FriendPicker';
 
 export default function SongDetail({ id }: { id: string }) {
   const [song, setSong] = useState<Song | null | undefined>(undefined);
@@ -23,6 +28,10 @@ export default function SongDetail({ id }: { id: string }) {
 }
 
 function SongDetailInner({ song }: { song: Song }) {
+  const acc = useStore(account);
+  const soc = useStore(social);
+  const [picker, setPicker] = useState<null | 'challenge' | 'send'>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const p = useStore(progress);
   const st = useStore(settings);
   const sp = p.songs[song.id];
@@ -119,10 +128,99 @@ function SongDetailInner({ song }: { song: Song }) {
         })}
       </div>
 
+      {acc.status === 'signed-in' && (
+        <FriendsOnSong
+          song={song}
+          myBest={sp?.best}
+          onChallenge={() => setPicker('challenge')}
+          onSend={builtinSong(song.id) ? undefined : () => setPicker('send')}
+          notice={notice}
+        />
+      )}
+      <FriendPicker
+        open={picker !== null}
+        title={picker === 'send' ? 'Enviar esta música para…' : 'Desafiar qual amigo?'}
+        onClose={() => setPicker(null)}
+        onPick={async (uid) => {
+          const kind = picker;
+          setPicker(null);
+          const name = soc.friends[uid]?.name ?? 'seu amigo';
+          try {
+            if (kind === 'send') {
+              await sendSong(uid, song);
+              setNotice(`Música enviada para ${name}!`);
+            } else {
+              await sendChallenge(uid, song, sp?.best ?? 0);
+              setNotice(`Desafio enviado para ${name}! ⚔️`);
+            }
+          } catch (e) {
+            setNotice(String((e as Error).message ?? e));
+          }
+        }}
+      />
+
       <div className="section-title">
         <h2>Partitura</h2>
       </div>
       <Score song={song} options={{ showNames: st.showNoteNames, naming: st.naming }} autoScroll={false} />
     </div>
+  );
+}
+
+function FriendsOnSong({
+  song,
+  myBest,
+  onChallenge,
+  onSend,
+  notice,
+}: {
+  song: Song;
+  myBest?: number;
+  onChallenge: () => void;
+  onSend?: () => void;
+  notice: string | null;
+}) {
+  const soc = useStore(social);
+  const rows = soc.friendIds
+    .map((uid) => soc.friends[uid])
+    .filter((f) => f?.best?.[song.id])
+    .map((f) => ({ uid: f.uid, name: f.name, photo: f.photo, avatar: f.avatar, a: f.best[song.id].a }))
+    .sort((a, b) => b.a - a.a);
+  return (
+    <>
+      <div className="section-title">
+        <h2>Com amigos</h2>
+      </div>
+      <div className="card">
+        {rows.length === 0 ? (
+          <p className="small muted" style={{ marginTop: 0 }}>
+            Nenhum amigo tocou esta música ainda{soc.friendIds.length ? '' : ' — adicione amigos na aba Amigos'}.
+          </p>
+        ) : (
+          rows.map((r, i) => (
+            <div key={r.uid} className="person-row" style={{ cursor: 'pointer' }} onClick={() => navigate('/amigo/' + r.uid)}>
+              <span className="rank-num">{i + 1}</span>
+              <Avatar name={r.name} photo={r.photo} avatar={r.avatar} seed={r.uid} size={32} />
+              <div className="who">
+                <b>{r.name}</b>
+              </div>
+              <b>{Math.round(r.a * 100)}%</b>
+              {myBest !== undefined && <span className="small muted">{myBest >= r.a ? 'você está na frente' : `faltam ${Math.ceil((r.a - myBest) * 100)}%`}</span>}
+            </div>
+          ))
+        )}
+        <div className="row" style={{ marginTop: 10 }}>
+          <button className="btn sm" onClick={onChallenge} disabled={!soc.friendIds.length}>
+            ⚔️ Desafiar um amigo{myBest ? ` (seu recorde: ${Math.round(myBest * 100)}%)` : ''}
+          </button>
+          {onSend && (
+            <button className="btn sm ghost" onClick={onSend} disabled={!soc.friendIds.length}>
+              <Icon name="upload" /> Enviar esta música
+            </button>
+          )}
+        </div>
+        {notice && <p className="small" style={{ color: 'var(--ok)', marginBottom: 0 }}>{notice}</p>}
+      </div>
+    </>
   );
 }

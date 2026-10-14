@@ -27,7 +27,9 @@ Funciona no navegador do celular, tablet ou computador, pode ser **instalado com
 | 🥁 **Treino de ritmo** | Leia e bata ritmos com o metrônomo (toque na tela, barra de espaço ou qualquer tecla do piano). |
 | 📂 **Suas músicas** | Importe **MusicXML** (.musicxml/.mxl — ex.: exportado do MuseScore) ou **MIDI** (.mid, convertido em partitura automaticamente). |
 | 📈 **Progresso** | Estrelas, XP, sequência de dias, meta diária, tempo de prática, melhores resultados. Backup/restauração em JSON. |
-| ☁️ **Sincronização opcional** | Com o seu Firebase (plano gratuito): login com Google e progresso em todos os aparelhos. |
+| 👤 **Conta** | Login com Google ou e-mail e senha. A sessão fica guardada no aparelho; o progresso vai para a nuvem e aparece em qualquer aparelho (funciona offline e sincroniza depois). |
+| 👥 **Amigos** | Código de amigo e link de convite, ranking semanal de XP, feed de atividades com aplausos 👏, mensagens, desafios ⚔️ ("supere meu recorde nesta música") e envio das músicas que você importou. |
+| 🏅 **Medalhas** | 23 conquistas (sequências, lições, músicas perfeitas, leitura rápida…), visíveis para os amigos. |
 
 Sem teclado por perto? Use o **teclado na tela** ou o **teclado do computador** (`A W S E D F T G Y H U J K…`, `Z`/`X` mudam a oitava).
 
@@ -62,6 +64,7 @@ Outros comandos:
 
 ```bash
 npm test           # testes automatizados
+npm run test:rules # testes das regras de segurança (emulador do Firestore; requer Java)
 npm run build      # gera a versão de produção em dist/
 npm run preview    # serve a versão de produção localmente
 ```
@@ -84,23 +87,45 @@ Endereços: https://partitura-live-2jo.web.app e https://partitura-live-2jo.fire
 
 ---
 
-## Firebase (login e sincronização)
+## Conta, dados e amigos
 
-Já está criado e configurado no projeto `partitura-live-2jo`:
+### Onde ficam os seus dados
 
-- app web registrado — a configuração pública está em `.env.production` e vai embutida no build;
-- banco **Firestore** em `southamerica-east1` (São Paulo) com as regras de [`firestore.rules`](firestore.rules): cada usuário só lê e escreve o próprio documento `users/{uid}`.
+| Situação | Onde fica | O que acontece |
+|---|---|---|
+| **Sem login** | Só no navegador deste aparelho (localStorage + IndexedDB) | Funciona 100% offline. Se limpar os dados do navegador ou trocar de aparelho, perde. |
+| **Com login** | Na sua conta no Firestore (`users/{uid}`) + cópia no aparelho | Tudo sincroniza sozinho entre aparelhos e funciona offline (envia quando voltar a internet). O que você fez antes do login é **somado** à conta. |
+| **Ao sair da conta** | Continua na nuvem | A cópia deste aparelho é apagada (bom para aparelhos compartilhados). Ao entrar de novo, tudo volta. |
+| **Excluir conta** | — | Apaga progresso, músicas, amizades, mensagens e o login (Perfil → Excluir conta). |
 
-**Falta um passo manual** (exige o console, pois cria uma credencial OAuth): ativar o login com Google.
+O que vai para a conta: lições e estrelas, músicas praticadas e etapas do plano de estudo, estatísticas de leitura, tempo de prática, XP, medalhas, preferências e as **músicas importadas** (compactadas em `users/{uid}/songs`).
 
-1. Abra https://console.firebase.google.com/project/partitura-live-2jo/authentication/providers
-2. *Começar* → **Google** → **Ativar** → escolha o e-mail de suporte → **Salvar**.
+**O que os amigos veem** (`profiles/{uid}`): nome, avatar, XP, sequência, lições concluídas, medalhas, recordes por música e atividades recentes. E-mail e progresso detalhado nunca são compartilhados.
 
-Pronto: no app, *Configurações → Sincronização → Entrar com Google*. O progresso passa a ser mesclado entre os aparelhos sem nunca perder nada (fica sempre o melhor resultado de cada um). Músicas importadas ficam só no aparelho onde foram importadas.
+### Estrutura no Firestore
 
-Sem login, tudo continua funcionando e fica salvo no próprio aparelho (com backup em JSON em *Configurações → Dados*).
+```
+users/{uid}                 progresso + preferências (só o dono)
+users/{uid}/songs/{id}      músicas importadas, gzip (só o dono)
+users/{uid}/inbox/{id}      mensagens: aplauso, texto, desafio, música (amigos criam; dono lê/apaga)
+profiles/{uid}              resumo público (usuário logado lê um por vez; ninguém lista)
+friendCodes/{CODIGO}        código de amigo → uid (consulta exata; ninguém lista)
+friendRequests/{de_para}    pedidos de amizade
+friendships/{a_b}           amizades (só quem recebeu o pedido pode aceitar)
+```
 
-> A `apiKey` do Firebase para web não é secreta — quem protege os dados são as regras do Firestore. Para usar outro projeto, troque `.firebaserc` e `.env.production` (ou cole a configuração em *Configurações → Sincronização*).
+As regras estão em [`firestore.rules`](firestore.rules) e têm testes automáticos (`npm run test:rules`, usa o emulador).
+
+### Projeto Firebase
+
+Projeto `partitura-live-2jo`, já com app web registrado (configuração pública em `.env.production`) e Firestore em `southamerica-east1` (São Paulo).
+
+**Ative os métodos de login** em https://console.firebase.google.com/project/partitura-live-2jo/authentication/providers :
+
+1. **Google** → Ativar → e-mail de suporte → Salvar.
+2. **E-mail/senha** → Ativar → Salvar.
+
+> A `apiKey` do Firebase para web não é secreta — quem protege os dados são as regras do Firestore. Para usar outro projeto, troque `.firebaserc` e `.env.production` (ou cole a configuração em *Configurações → Avançado*).
 
 ---
 
@@ -142,7 +167,7 @@ src/
   screens/     telas (início, trilha, lição, músicas, player, treinos, progresso, configurações)
   data/        músicas embutidas e currículo
   state/       configurações e progresso (localStorage)
-  lib/         roteador, store, IndexedDB, sincronização Firebase
+  lib/         roteador, store, IndexedDB, Firebase (conta, sincronização, amigos, músicas na nuvem)
 public/        ícones, manifesto PWA, service worker, amostras de piano
 tests/         testes (notação, importadores, currículo, mesclagem, detector)
 ```
@@ -155,6 +180,10 @@ lh: 'C3w@5 | G3w@1 | (C3 E3 G3)w | ...'
 ```
 
 `q`/`h`/`w`/`e`/`s` = semínima/mínima/semibreve/colcheia/semicolcheia, `.` = ponto, `@3` = dedo, `~` = ligadura, `(…)` = acorde, `rq` = pausa, `R` = compasso de pausa.
+
+### Testes ponta a ponta
+
+Veja [`e2e/README.md`](e2e/README.md): simulam duas pessoas usando o app (contas, amizade, ranking, desafios, músicas na nuvem) com os emuladores do Firebase.
 
 ### Testes do detector com áudio real
 

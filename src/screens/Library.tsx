@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { builtinSongs } from '../data/songs';
-import { deleteImported, listImported, saveImported, type ImportedRecord } from '../data/library';
+import { deleteImported, listImported, onLibraryChange, saveImported, type ImportedRecord } from '../data/library';
 import type { Song } from '../music/types';
 import { useStore } from '../lib/store';
 import { progress } from '../state/progress';
@@ -24,6 +24,7 @@ export function Library() {
   const refresh = () => listImported().then(setImported);
   useEffect(() => {
     void refresh();
+    return onLibraryChange(() => void refresh());
   }, []);
 
   const onFiles = async (files: FileList | null) => {
@@ -48,7 +49,6 @@ export function Library() {
         await saveImported(song, f.name);
         last = song;
       }
-      await refresh();
       if (last && files.length === 1) navigate(`/musica/${encodeURIComponent(last.id)}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -162,7 +162,6 @@ export function Library() {
                 onClick={async () => {
                   if (!confirm(`Remover "${r.song.title}"?`)) return;
                   await deleteImported(r.id);
-                  void refresh();
                 }}
               >
                 <Icon name="trash" />

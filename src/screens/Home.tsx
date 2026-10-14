@@ -11,6 +11,10 @@ import { nextLessonId } from './PathScreen';
 import { SongCard } from './Library';
 import { listImported } from '../data/library';
 import type { Song } from '../music/types';
+import { account } from '../lib/account';
+import { friendFeed, profileWeek, social } from '../lib/social';
+import { weekStats } from '../state/progress';
+import { Avatar } from '../components/Avatar';
 
 export function Home() {
   const p = useStore(progress);
@@ -22,6 +26,12 @@ export function Home() {
   const mins = minutesToday(p);
   const goal = st.dailyGoalMin;
   const [recent, setRecent] = useState<Song[]>([]);
+  const acc = useStore(account);
+  const soc = useStore(social);
+  const signedIn = acc.status === 'signed-in' && !!acc.user;
+  const feed = friendFeed(soc).slice(0, 3);
+  const myWeek = weekStats(p).xp;
+  const rank = signedIn ? 1 + soc.friendIds.filter((id) => soc.friends[id] && profileWeek(soc.friends[id]).xp > myWeek).length : 0;
 
   useEffect(() => {
     const ids = Object.entries(p.songs)
@@ -41,6 +51,25 @@ export function Home() {
 
   return (
     <div>
+      <div className="row between nowrap" style={{ marginBottom: 12 }}>
+        <div className="small muted" style={{ fontWeight: 650 }}>
+          {signedIn ? `Olá, ${(soc.me?.name ?? acc.user!.name).split(' ')[0]}!` : 'Partitura Live'}
+        </div>
+        <a href="#/perfil" className="row nowrap" style={{ gap: 8, color: 'var(--ink)' }} aria-label="Perfil">
+          {signedIn ? (
+            <>
+              <span className="chip">
+                <Icon name="fire" size={14} /> {p.streak.current}
+              </span>
+              <Avatar name={acc.user!.name} photo={acc.user!.photo} avatar={st.avatar} seed={acc.user!.uid} size={34} />
+            </>
+          ) : acc.status === 'signed-out' ? (
+            <span className="btn sm">Entrar</span>
+          ) : (
+            <Icon name="user" size={26} />
+          )}
+        </a>
+      </div>
       <div className="hero">
         <div className="hero-notes" aria-hidden>
           ♫
@@ -96,6 +125,50 @@ export function Home() {
           <ProgressBar value={done / total} />
         </div>
       </div>
+
+      {signedIn && soc.friendIds.length > 0 && (
+        <>
+          <div className="section-title">
+            <h2>Amigos</h2>
+            <a href="#/amigos" className="small">
+              Ver tudo
+            </a>
+          </div>
+          <div className="card">
+            <div className="row between">
+              <b>
+                <Icon name="trophy" size={18} /> Você está em {rank}º no ranking da semana
+              </b>
+              <span className="small muted">{myWeek} XP</span>
+            </div>
+            {feed.map((f) => (
+              <div key={`${f.uid}|${f.at}|${f.t}`} className="feed-item">
+                <Avatar name={f.name} photo={f.photo} avatar={f.avatar} seed={f.uid} size={30} />
+                <div className="txt">
+                  <b>{f.name}</b> {f.t.charAt(0).toLowerCase() + f.t.slice(1)}
+                </div>
+              </div>
+            ))}
+            {soc.unread + soc.incoming.length > 0 && (
+              <a className="btn sm" href="#/amigos?aba=msgs" style={{ marginTop: 8 }}>
+                {soc.unread + soc.incoming.length} novidade(s) para você
+              </a>
+            )}
+          </div>
+        </>
+      )}
+      {acc.status === 'signed-out' && done + Object.keys(p.songs).length > 0 && (
+        <div className="banner" style={{ marginTop: 16 }}>
+          <Icon name="cloud" size={22} />
+          <div style={{ flex: 1 }}>
+            <b>Seu progresso está só neste aparelho.</b>
+            <div className="small">Entre na sua conta para salvá-lo na nuvem, usar em outros aparelhos e praticar com amigos.</div>
+          </div>
+          <a className="btn sm primary" href="#/perfil">
+            Entrar
+          </a>
+        </div>
+      )}
 
       <div className="section-title">
         <h2>Treino rápido</h2>

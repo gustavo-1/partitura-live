@@ -43,6 +43,26 @@ export interface ImportedRecord {
   fileName: string;
 }
 
+/** Ganchos para a nuvem (a conta registra quando há login). */
+interface LibraryHooks {
+  onSave?: (r: ImportedRecord) => void;
+  onDelete?: (id: string) => void;
+}
+let hooks: LibraryHooks = {};
+export function setLibraryHooks(h: LibraryHooks) {
+  hooks = h;
+}
+
+const listeners = new Set<() => void>();
+/** Avisa quando a lista de músicas importadas muda (ex.: chegou uma da nuvem). */
+export function onLibraryChange(fn: () => void): () => void {
+  listeners.add(fn);
+  return () => listeners.delete(fn);
+}
+export function notifyLibraryChange() {
+  listeners.forEach((fn) => fn());
+}
+
 export async function listImported(): Promise<ImportedRecord[]> {
   try {
     const all = await idb.all<ImportedRecord>('songs');
@@ -52,12 +72,17 @@ export async function listImported(): Promise<ImportedRecord[]> {
   }
 }
 
-export async function saveImported(song: Song, fileName: string): Promise<void> {
-  await idb.put<ImportedRecord>('songs', { id: song.id, song, addedAt: Date.now(), fileName });
+export async function saveImported(song: Song, fileName: string, opts: { fromCloud?: boolean; addedAt?: number } = {}): Promise<void> {
+  const rec: ImportedRecord = { id: song.id, song, addedAt: opts.addedAt ?? Date.now(), fileName };
+  await idb.put<ImportedRecord>('songs', rec);
+  if (!opts.fromCloud) hooks.onSave?.(rec);
+  notifyLibraryChange();
 }
 
-export async function deleteImported(id: string): Promise<void> {
+export async function deleteImported(id: string, opts: { local?: boolean } = {}): Promise<void> {
   await idb.del('songs', id);
+  if (!opts.local) hooks.onDelete?.(id);
+  notifyLibraryChange();
 }
 
 export { builtinSongs };

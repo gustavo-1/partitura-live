@@ -2,14 +2,15 @@ import { useRef, useState } from 'react';
 import { useStore } from '../lib/store';
 import { defaultSettings, settings, type Settings } from '../state/settings';
 import { emptyProgress, mergeProgress, progress, type Progress } from '../state/progress';
-import { hasBuildConfig, parseFirebaseConfig, signIn, signOutSync, startSync, syncNow, syncState } from '../lib/sync';
+import { parseFirebaseConfig } from '../lib/firebase';
+import { account } from '../lib/account';
 import { Seg, Toggle } from '../components/ui';
 import { Icon } from '../components/Icon';
 import { initMidi, input } from '../audio/input';
 
 export function SettingsScreen() {
   const s = useStore(settings);
-  const sync = useStore(syncState);
+  const acc = useStore(account);
   const [cfgDraft, setCfgDraft] = useState(s.firebaseConfig);
   const [midiMsg, setMidiMsg] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -154,80 +155,55 @@ export function SettingsScreen() {
 
       <div className="card">
         <h3>
-          <Icon name="cloud" size={20} /> Sincronização (Firebase)
+          <Icon name="cloud" size={20} /> Conta e sincronização
         </h3>
         <p className="small muted">
-          Opcional. Seu progresso fica salvo neste aparelho automaticamente. Para levar para outros aparelhos, conecte um projeto Firebase
-          gratuito e entre com sua conta Google. Veja o passo a passo no README do projeto.
+          {acc.status === 'signed-in'
+            ? `Conectado como ${acc.user?.email}. Seu progresso fica salvo na conta e aparece em todos os aparelhos.`
+            : 'Sem login, seu progresso fica só neste aparelho. Entre para salvar na nuvem e praticar com amigos.'}
         </p>
-        {!hasBuildConfig() && (
-          <div className="field">
-            <label htmlFor="fbcfg">Configuração do app web do Firebase</label>
-            <textarea
-              id="fbcfg"
-              placeholder={'{\n  "apiKey": "...",\n  "authDomain": "seu-projeto.firebaseapp.com",\n  "projectId": "seu-projeto",\n  "appId": "..."\n}'}
-              value={cfgDraft}
-              onChange={(e) => setCfgDraft(e.target.value)}
-            />
-            <div className="row">
+        <a className="btn sm primary" href="#/perfil">
+          {acc.status === 'signed-in' ? 'Ver conta' : 'Entrar / criar conta'}
+        </a>
+        <details style={{ marginTop: 12 }}>
+          <summary className="small muted" style={{ cursor: 'pointer' }}>
+            Avançado: usar outro projeto Firebase
+          </summary>
+          <p className="small muted">
+            Este app já vem conectado ao projeto padrão. Para usar o seu próprio projeto, cole aqui o objeto firebaseConfig do app web (veja o README).
+          </p>
+          <textarea
+            id="fbcfg"
+            placeholder={'{\n  "apiKey": "...",\n  "authDomain": "seu-projeto.firebaseapp.com",\n  "projectId": "seu-projeto",\n  "appId": "..."\n}'}
+            value={cfgDraft}
+            onChange={(e) => setCfgDraft(e.target.value)}
+          />
+          <div className="row" style={{ marginTop: 6 }}>
+            <button
+              className="btn sm"
+              onClick={() => {
+                if (cfgDraft.trim() && !parseFirebaseConfig(cfgDraft)) {
+                  alert('Não consegui ler essa configuração. Cole o objeto firebaseConfig do console do Firebase.');
+                  return;
+                }
+                set({ firebaseConfig: cfgDraft });
+              }}
+            >
+              Salvar
+            </button>
+            {s.firebaseConfig && (
               <button
-                className="btn sm"
+                className="btn sm ghost danger"
                 onClick={() => {
-                  if (cfgDraft.trim() && !parseFirebaseConfig(cfgDraft)) {
-                    alert('Não consegui ler essa configuração. Cole o objeto firebaseConfig do console do Firebase.');
-                    return;
-                  }
-                  set({ firebaseConfig: cfgDraft });
-                  void startSync();
+                  setCfgDraft('');
+                  set({ firebaseConfig: '' });
                 }}
               >
-                Salvar configuração
+                Voltar ao projeto padrão
               </button>
-              {s.firebaseConfig && (
-                <button
-                  className="btn sm ghost danger"
-                  onClick={() => {
-                    setCfgDraft('');
-                    set({ firebaseConfig: '' });
-                    void startSync();
-                  }}
-                >
-                  Remover
-                </button>
-              )}
-            </div>
+            )}
           </div>
-        )}
-        <div className="row" style={{ marginTop: 8 }}>
-          <span className={'chip ' + (sync.status === 'signed-in' ? 'ok' : sync.status === 'error' ? 'bad' : '')}>
-            {sync.status === 'off'
-              ? 'Desativada'
-              : sync.status === 'ready'
-                ? 'Pronta — entre para sincronizar'
-                : sync.status === 'syncing'
-                  ? 'Sincronizando…'
-                  : sync.status === 'signed-in'
-                    ? `Conectado: ${sync.user?.email}`
-                    : 'Erro'}
-          </span>
-          {(sync.status === 'ready' || (sync.status === 'error' && !sync.user)) && (
-            <button className="btn sm primary" onClick={() => void signIn().catch(() => undefined)}>
-              Entrar com Google
-            </button>
-          )}
-          {sync.user && (
-            <>
-              <button className="btn sm" onClick={() => void syncNow()}>
-                Sincronizar agora
-              </button>
-              <button className="btn sm ghost" onClick={() => void signOutSync()}>
-                Sair
-              </button>
-            </>
-          )}
-        </div>
-        {sync.message && <p className="small" style={{ color: 'var(--bad)' }}>{sync.message}</p>}
-        {sync.lastSync && sync.user && <p className="tiny muted">Última sincronização: {new Date(sync.lastSync).toLocaleString('pt-BR')}</p>}
+        </details>
       </div>
 
       <div className="card">

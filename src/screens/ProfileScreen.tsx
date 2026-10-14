@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useStore } from '../lib/store';
-import { progress, today } from '../state/progress';
+import { progress, today, weekStats } from '../state/progress';
+import { AccountCard } from '../components/AccountCard';
+import { ACHIEVEMENTS } from '../data/achievements';
 import { settings } from '../state/settings';
 import { allLessons } from '../data/curriculum';
 import { builtinSongs } from '../data/songs';
@@ -10,7 +12,7 @@ import { ProgressBar } from '../components/ui';
 import { navigate } from '../lib/router';
 import type { Song } from '../music/types';
 
-export function ProgressScreen() {
+export function ProfileScreen() {
   const p = useStore(progress);
   const st = useStore(settings);
   const lessons = allLessons();
@@ -33,13 +35,23 @@ export function ProgressScreen() {
   const reading = Object.values(p.noteStats);
   const readAcc = reading.length ? reading.reduce((a, s) => a + s.correct, 0) / Math.max(1, reading.reduce((a, s) => a + s.seen, 0)) : null;
   const played = Object.entries(p.songs).sort((a, b) => b[1].lastPlayed - a[1].lastPlayed);
+  const week = weekStats(p);
+  const got = p.badges ?? {};
+  const badges = [...ACHIEVEMENTS].sort((a, b) => (got[b.id] ? 1 : 0) - (got[a.id] ? 1 : 0) || (got[b.id] ?? 0) - (got[a.id] ?? 0));
 
   return (
     <div>
       <div className="page-header">
-        <h1>Progresso</h1>
+        <h1 style={{ flex: 1 }}>Perfil</h1>
+        <a className="btn ghost sm" href="#/config">
+          <Icon name="settings" /> Configurações
+        </a>
       </div>
-      <div className="grid cols-3">
+      <AccountCard />
+      <div className="section-title">
+        <h2>Seu progresso</h2>
+      </div>
+      <div className="stat-grid">
         <div className="card flat kpi">
           <span>Experiência</span>
           <b>{p.xp} XP</b>
@@ -47,7 +59,7 @@ export function ProgressScreen() {
         <div className="card flat kpi">
           <span>Sequência</span>
           <b>
-            <Icon name="fire" size={20} /> {p.streak.current} dias
+            <Icon name="fire" size={20} /> {p.streak.current} {p.streak.current === 1 ? 'dia' : 'dias'}
           </b>
           <span className="tiny">Recorde: {p.streak.best}</span>
         </div>
@@ -63,10 +75,33 @@ export function ProgressScreen() {
           <span className="tiny">{stars} estrelas</span>
         </div>
         <div className="card flat kpi">
+          <span>Esta semana</span>
+          <b>{week.xp} XP</b>
+          <span className="tiny">{week.minutes} min de prática</span>
+        </div>
+        <div className="card flat kpi">
           <span>Leitura de notas</span>
           <b>{readAcc === null ? '—' : Math.round(readAcc * 100) + '%'}</b>
           <span className="tiny">{reading.reduce((a, s) => a + s.seen, 0)} cartões respondidos</span>
         </div>
+      </div>
+
+      <div className="section-title">
+        <h2>Medalhas</h2>
+        <span className="small muted">
+          {Object.keys(got).length}/{ACHIEVEMENTS.length}
+        </span>
+      </div>
+      <div className="badge-grid">
+        {badges.map((a) => (
+          <div key={a.id} className={'badge-card' + (got[a.id] ? '' : ' locked')} title={a.desc}>
+            <span className="ic">{a.icon}</span>
+            <div>
+              <b>{a.title}</b>
+              <span>{a.desc}</span>
+            </div>
+          </div>
+        ))}
       </div>
 
       <div className="section-title">
@@ -104,7 +139,7 @@ export function ProgressScreen() {
                 const s = songs.find((x) => x.id === id);
                 return (
                   <tr key={id} style={{ cursor: 'pointer' }} onClick={() => s && navigate(`/musica/${encodeURIComponent(id)}`)}>
-                    <td>{s?.title ?? id}</td>
+                    <td>{s?.title ?? p.songTitles?.[id] ?? id}</td>
                     <td style={{ minWidth: 90 }}>
                       <ProgressBar value={sp.best} />
                       <span className="tiny muted">{Math.round(sp.best * 100)}%</span>
