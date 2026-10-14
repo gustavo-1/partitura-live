@@ -1,11 +1,10 @@
-# Publica o app no GitHub Pages a cada push na branch main.
+# Alternativa ao Firebase Hosting: publica no GitHub Pages quando executado manualmente
+# (Actions → Deploy (GitHub Pages) → Run workflow).
 # Antes da primeira vez: Settings → Pages → Build and deployment → Source: "GitHub Actions".
-# Opcional: Settings → Secrets and variables → Actions → Variables → FIREBASE_CONFIG (JSON do app web).
+# A configuração do Firebase vem de .env.production.
 name: Deploy (GitHub Pages)
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -29,8 +28,6 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
-        env:
-          VITE_FIREBASE_CONFIG: ${{ vars.FIREBASE_CONFIG }}
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v4
         with:

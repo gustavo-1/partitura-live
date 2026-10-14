@@ -4,7 +4,7 @@ App gratuito e livre para **aprender a ler partituras e tocar teclado**. Ele **o
 
 Funciona no navegador do celular, tablet ou computador, pode ser **instalado como app** (PWA) e funciona **offline**. Não precisa de cabo: o microfone basta. (Se o seu teclado tiver USB/MIDI, ele também é reconhecido.)
 
-> Depois de publicado no GitHub Pages, o endereço será **https://gustavo-1.github.io/partitura-live/** (veja [Publicar](#publicar)).
+> **App publicado:** https://partitura-live-2jo.web.app (Firebase Hosting, projeto `partitura-live-2jo`).
 
 ---
 
@@ -70,40 +70,37 @@ npm run preview    # serve a versão de produção localmente
 
 ## Publicar
 
-### Opção A — GitHub Pages (grátis, automático)
-
-1. No GitHub: **Settings → Pages → Build and deployment → Source: GitHub Actions**.
-2. Faça merge na branch `main`. O workflow `.github/workflows/deploy.yml` testa, gera e publica.
-3. O app fica em `https://gustavo-1.github.io/partitura-live/`.
-
-### Opção B — Firebase Hosting (grátis)
+O app está hospedado no **Firebase Hosting** (projeto `partitura-live-2jo`, configurado em `.firebaserc`). Para publicar uma nova versão:
 
 ```bash
 npm install -g firebase-tools
 firebase login
-npm run build
-firebase deploy --only hosting --project SEU-PROJETO
+npm run deploy      # gera o build e publica site + regras do Firestore
 ```
+
+Endereços: https://partitura-live-2jo.web.app e https://partitura-live-2jo.firebaseapp.com
+
+**Alternativa — GitHub Pages:** o workflow `.github/workflows/deploy.yml` (execução manual em *Actions → Deploy (GitHub Pages) → Run workflow*) publica em `https://gustavo-1.github.io/partitura-live/`. Antes, ative *Settings → Pages → Source: GitHub Actions* e adicione `gustavo-1.github.io` aos domínios autorizados do Firebase Authentication.
 
 ---
 
-## Conectar ao seu Firebase (opcional)
+## Firebase (login e sincronização)
 
-Sem Firebase, o progresso fica salvo no próprio aparelho (e você pode exportar um backup). Com Firebase, ele sincroniza entre celular e computador. Tudo cabe no plano gratuito **Spark**.
+Já está criado e configurado no projeto `partitura-live-2jo`:
 
-1. Acesse <https://console.firebase.google.com> → **Adicionar projeto** (pode desativar o Analytics).
-2. **Authentication → Começar → Sign-in method → Google → Ativar**.
-3. **Authentication → Settings → Authorized domains**: adicione `gustavo-1.github.io` (e o domínio onde você publicar).
-4. **Firestore Database → Criar banco de dados** (modo produção, região `southamerica-east1` por exemplo).
-5. **Firestore → Regras**: cole o conteúdo de [`firestore.rules`](firestore.rules) e publique (cada usuário só acessa os próprios dados).
-6. **Configurações do projeto → Seus apps → Web (`</>`)** → registre o app e copie o objeto `firebaseConfig`.
-7. Escolha uma forma de usar a configuração:
-   - **No app**: Configurações → Sincronização → cole o `firebaseConfig` → *Salvar* → *Entrar com Google*; ou
-   - **No build** (vale para todos): GitHub → **Settings → Secrets and variables → Actions → Variables → New variable** `FIREBASE_CONFIG` com o JSON em uma linha. Localmente, crie `.env.local` como em [`.env.example`](.env.example).
+- app web registrado — a configuração pública está em `.env.production` e vai embutida no build;
+- banco **Firestore** em `southamerica-east1` (São Paulo) com as regras de [`firestore.rules`](firestore.rules): cada usuário só lê e escreve o próprio documento `users/{uid}`.
 
-> A `apiKey` do Firebase para web não é secreta — quem protege os dados são as regras do Firestore.
+**Falta um passo manual** (exige o console, pois cria uma credencial OAuth): ativar o login com Google.
 
-O que é sincronizado: lições, estrelas, músicas praticadas, estatísticas de leitura, tempo de prática e preferências. A mesclagem nunca perde progresso (fica sempre com o melhor resultado de cada aparelho). Músicas importadas ficam só no aparelho onde foram importadas.
+1. Abra https://console.firebase.google.com/project/partitura-live-2jo/authentication/providers
+2. *Começar* → **Google** → **Ativar** → escolha o e-mail de suporte → **Salvar**.
+
+Pronto: no app, *Configurações → Sincronização → Entrar com Google*. O progresso passa a ser mesclado entre os aparelhos sem nunca perder nada (fica sempre o melhor resultado de cada um). Músicas importadas ficam só no aparelho onde foram importadas.
+
+Sem login, tudo continua funcionando e fica salvo no próprio aparelho (com backup em JSON em *Configurações → Dados*).
+
+> A `apiKey` do Firebase para web não é secreta — quem protege os dados são as regras do Firestore. Para usar outro projeto, troque `.firebaserc` e `.env.production` (ou cole a configuração em *Configurações → Sincronização*).
 
 ---
 
