@@ -4,12 +4,13 @@ import { buildSong } from '../../music/notation';
 import { builtinSong } from '../../data/songs';
 import { generateExercise } from '../../music/generator';
 import { buildEvents } from '../../music/timeline';
-import { midiName, parsePitch, pitchClass, SOLFEGE, STEPS, type NamingStyle } from '../../music/theory';
+import { midiName, parsePitch, pitchClass, pitchToVexKey, SOLFEGE, spellMidi, STEPS, type NamingStyle } from '../../music/theory';
 import { PPQ, type Hand, type Song } from '../../music/types';
 import { input, type NoteEvent } from '../../audio/input';
 import { audioCtx, now, resumeAudio } from '../../audio/context';
 import { click } from '../../audio/metronome';
-import { playNote } from '../../audio/piano';
+import { playNote, preloadPiano } from '../../audio/piano';
+import { mic } from '../../audio/mic';
 import { Score, type NoteMark } from '../../components/score/Score';
 import { Keyboard, type KeyMark } from '../../components/Keyboard';
 import { MiniPlayer } from '../../components/MiniPlayer';
@@ -18,6 +19,7 @@ import { Icon } from '../../components/Icon';
 import { useStore } from '../../lib/store';
 import { settings } from '../../state/settings';
 import { progress, recordNoteRead } from '../../state/progress';
+import { isDue } from '../../practice/review';
 
 export interface ActivityProps<T extends Activity = Activity> {
   activity: T;
@@ -76,7 +78,7 @@ export function QuizActivity({ activity, onComplete }: ActivityProps<Extract<Act
       <div className="big-question">{activity.question}</div>
       {activity.staff && <StaffView spec={activity.staff} />}
       {activity.keys && <KeysView spec={activity.keys} />}
-      <div className="answer-grid">
+      <div className={'answer-grid' + (activity.options.some((o) => o.length > 14) ? ' long' : '')}>
         {activity.options.map((o, i) => (
           <button
             key={i}
@@ -198,7 +200,9 @@ function pickWeighted(pool: string[], clefKey: (p: string) => string, last: stri
     if (!s) return 3; // novidade
     const err = 1 - s.correct / Math.max(1, s.seen);
     const slow = s.ms > 2500 ? 1 : 0;
-    return 1 + (4 - s.box) * 0.6 + err * 4 + slow;
+    // repetição espaçada: a nota "vencida" volta com prioridade
+    const due = isDue(s) ? 2.5 : 0;
+    return 1 + (4 - s.box) * 0.6 + err * 4 + slow + due;
   });
   const total = weights.reduce((a, b) => a + b, 0);
   let r = Math.random() * total;
@@ -545,6 +549,214 @@ export function SightActivity({ activity, onComplete }: ActivityProps<Extract<Ac
       <button className="btn ghost" onClick={() => setSeed(Date.now())}>
         <Icon name="sparkle" /> Gerar outro exercício
       </button>
+    </div>
+  );
+}
+
+// ---------- Ouça e toque (de ouvido) ----------
+function midiToken(m: number): string {
+  const [n, o] = pitchToVexKey(spellMidi(m, 0)).split('/');
+  return n[0].toUpperCase() + n.slice(1) + o;
+}
+
+/** Melodia curta que começa na nota de referência e anda mais por graus conjuntos. */
+export function makeEchoPattern(pool: number[], length: number, seed = Math.random()): number[] {
+  let r = seed * 9301 + 49297;
+  const rnd = () => {
+    r = (r * 9301 + 49297) % 233280;
+    return r / 233280;
+  };
+  const out = [pool[0]];
+  let i = 0;
+  for (let k = 1; k < length; k++) {
+    let next = i;
+    for (let tries = 0; tries < 8 && (next === i || next < 0 || next >= pool.length); tries++) {
+      const leap = rnd() < 0.3 ? 2 : 1;
+      next = i + (rnd() < 0.5 ? -leap : leap);
+    }
+    if (next < 0 || next >= pool.length) next = Math.min(pool.length - 1, i + 1);
+    i = next;
+    out.push(pool[i]);
+  }
+  return out;
+}
+
+export function EchoTrainer({
+  pool,
+  length = 3,
+  count = 3,
+  tempo = 84,
+  clef = 'treble',
+  fixed,
+  onComplete,
+  onSolved,
+}: {
+  pool: number[];
+  length?: number;
+  count?: number;
+  tempo?: number;
+  clef?: 'treble' | 'bass';
+  fixed?: number[][];
+  onComplete: (score: number) => void;
+  onSolved?: (firstTry: boolean) => void;
+}) {
+  const st = useStore(settings);
+  const patterns = useMemo(
+    () => fixed ?? Array.from({ length: count }, () => makeEchoPattern(pool, length)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [pool.join(','), length, count, fixed],
+  );
+  const [round, setRound] = useState(0);
+  const [pos, setPos] = useState(0);
+  const [misses, setMisses] = useState(0);
+  const [scores, setScores] = useState<number[]>([]);
+  const [phase, setPhase] = useState<'playing' | 'answer' | 'solved' | 'revealed'>('playing');
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [flash, setFlash] = useState<Map<number, KeyMark>>(new Map());
+  const playingUntil = useRef(0);
+  const timer = useRef<number | null>(null);
+  const pat = patterns[Math.min(round, patterns.length - 1)];
+  const done = round >= patterns.length;
+  const lo = Math.min(...pool) - 5;
+  const hi = Math.max(...pool) + 5;
+
+  useEffect(() => {
+    if (done) onComplete(scores.reduce((a, b) => a + b, 0) / Math.max(1, scores.length));
+  }, [done, scores, onComplete]);
+
+  const play = async (notes = pat) => {
+    const ctx = await resumeAudio();
+    await preloadPiano(lo, hi).catch(() => undefined);
+    const beat = 60 / tempo;
+    const t0 = ctx.currentTime + 0.15;
+    notes.forEach((m, i) => playNote(m, t0 + i * beat, beat * 0.95));
+    const end = t0 + notes.length * beat + 0.35;
+    playingUntil.current = end;
+    mic.suppress(end);
+    setPhase((p) => (p === 'solved' || p === 'revealed' ? p : 'playing'));
+    setPos(0);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => setPhase((p) => (p === 'playing' ? 'answer' : p)), Math.max(0, (end - ctx.currentTime) * 1000));
+  };
+  useEffect(() => {
+    if (done) return;
+    setMisses(0);
+    setMsg(null);
+    setPhase('playing');
+    void play(patterns[round]);
+    return () => {
+      if (timer.current) clearTimeout(timer.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [round]);
+
+  const st8 = useRef({ phase, pos, misses, pat });
+  st8.current = { phase, pos, misses, pat };
+  useEffect(
+    () =>
+      input.on((e: NoteEvent) => {
+        if (e.type !== 'on') return;
+        const { phase: ph, pos: p, misses: ms, pat: cur } = st8.current;
+        if (ph === 'solved' || ph === 'revealed') return;
+        // o próprio app tocando: ignora o que o microfone ouvir
+        if (e.source === 'mic' && e.time < playingUntil.current) return;
+        if (ph === 'playing' && e.source === 'mic') return;
+        if (e.midi === cur[p]) {
+          setFlash(new Map([[e.midi, { fill: '#4ade80' }]]));
+          if (p + 1 >= cur.length) {
+            const sc = ms === 0 ? 1 : ms <= 2 ? 0.6 : 0.3;
+            setScores((x) => [...x, sc]);
+            setPhase('solved');
+            setMsg({ ok: true, text: ms === 0 ? 'De primeira! 👏' : 'Conseguiu!' });
+            onSolved?.(ms === 0);
+          } else setPos(p + 1);
+        } else {
+          setFlash(new Map([[e.midi, { fill: '#f87171' }]]));
+          setMisses(ms + 1);
+          setPos(0);
+          setMsg({
+            ok: false,
+            text: p === 0 ? `A melodia começa em ${midiName(cur[0], st.naming)}. Tente de novo.` : 'Quase! Recomece do início — ouça de novo se precisar.',
+          });
+        }
+      }),
+    [onSolved, st.naming],
+  );
+
+  if (done) return <div className="big-question">Concluído!</div>;
+
+  const marks = new Map<number, KeyMark>(flash);
+  // referência: a primeira nota fica marcada
+  if (!marks.has(pat[0])) marks.set(pat[0], { hint: 'var(--accent)', label: '★' });
+  if (phase === 'revealed') pat.forEach((m, i) => marks.set(m, { hint: '#22c55e', label: String(i + 1) }));
+  const showStaff = phase === 'solved' || phase === 'revealed';
+  const tokens = pat.map((m, i) => midiToken(m) + (i === pat.length - 1 ? 'h' : 'q')).join(' ');
+  return (
+    <div className="stack">
+      <div className="row between small muted">
+        <span>
+          Melodia {round + 1} de {patterns.length}
+        </span>
+        <span className="echo-dots" aria-label={`${pos} de ${pat.length} notas`}>
+          {pat.map((_, i) => (
+            <i key={i} className={i < pos || phase === 'solved' ? 'on' : ''} />
+          ))}
+        </span>
+      </div>
+      <div className="big-question">{phase === 'playing' ? '🎧 Ouça…' : phase === 'answer' ? 'Agora toque de volta' : phase === 'solved' ? 'Isso! É assim que se escreve:' : 'Era assim:'}</div>
+      {showStaff && (
+        <div style={{ maxWidth: 360, margin: '0 auto', width: '100%' }}>
+          <StaffView spec={{ [clef === 'bass' ? 'lh' : 'rh']: tokens, names: true }} />
+        </div>
+      )}
+      <div className={'feedback-line ' + (msg ? (msg.ok ? 'ok' : 'bad') : 'muted')}>{msg?.text ?? `Começa na nota marcada com ★ (${midiName(pat[0], st.naming)}).`}</div>
+      <Keyboard lo={lo} hi={hi} marks={marks} labels="c" naming={st.naming} onDown={(m) => input.press(m)} onUp={(m) => input.release(m)} />
+      <div className="row" style={{ justifyContent: 'center' }}>
+        {phase !== 'solved' && phase !== 'revealed' && (
+          <button className="btn" onClick={() => void play()}>
+            <Icon name="ear" /> Ouvir de novo
+          </button>
+        )}
+        {misses >= 3 && phase === 'answer' && (
+          <button
+            className="btn ghost"
+            onClick={() => {
+              setScores((x) => [...x, 0]);
+              setPhase('revealed');
+              void play();
+            }}
+          >
+            Mostrar a resposta
+          </button>
+        )}
+        {(phase === 'solved' || phase === 'revealed') && (
+          <>
+            <button className="btn" onClick={() => void play()}>
+              <Icon name="ear" /> Ouvir
+            </button>
+            <button className="btn primary" onClick={() => setRound((r) => r + 1)}>
+              {round + 1 >= patterns.length ? 'Concluir' : 'Próxima melodia'} <Icon name="next" />
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function EchoActivity({ activity, onComplete }: ActivityProps<Extract<Activity, { type: 'echo' }>>) {
+  return (
+    <div className="stack">
+      {activity.intro && <p className="muted">{activity.intro}</p>}
+      <EchoTrainer
+        pool={activity.pool}
+        length={activity.length}
+        count={activity.count}
+        tempo={activity.tempo}
+        clef={activity.clef}
+        fixed={activity.fixed}
+        onComplete={onComplete}
+      />
     </div>
   );
 }

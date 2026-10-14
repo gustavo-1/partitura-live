@@ -16,10 +16,12 @@ import { MicButton, MicHelp, Seg, Sheet, Toggle } from '../components/ui';
 import { useStore } from '../lib/store';
 import { back, navigate } from '../lib/router';
 import { keyboardRange, settings } from '../state/settings';
-import { logPractice, recordSong, starsFor } from '../state/progress';
+import { logPractice, recordActivity, recordSong, starsFor } from '../state/progress';
 import { normalizeRange } from '../components/keyboardLayout';
 import { account } from '../lib/account';
-import { sendChallenge, sendText, social } from '../lib/social';
+import { sendChallenge, social } from '../lib/social';
+import { sendChatResult } from '../lib/chat';
+import { Confetti } from '../components/Celebration';
 import { FriendPicker } from '../components/FriendPicker';
 
 interface Challenge {
@@ -102,6 +104,11 @@ function PlayerInner({ song, query }: { song: Song; query: URLSearchParams }) {
   const [result, setResult] = useState<PassResult | null>(null);
   const [selecting, setSelecting] = useState<number | null | 'start'>(null);
   const [challenge] = useState(() => readChallenge(song.id, query));
+  // etapas finais do plano: sem dicas no teclado, para ler a partitura de verdade
+  const [hideHints, setHideHints] = useState(query.get('dicas') === '0');
+  // prática focada (trecho em repetição): 3 rodadas seguidas limpas firmam o trecho
+  const focusRef = useRef({ streak: 0, done: false });
+  const [focus, setFocus] = useState({ streak: 0, done: false });
   const timeRef = useRef(0);
   const fallState = useRef(new Map<string, FallState>());
 
@@ -157,11 +164,34 @@ function PlayerInner({ song, query }: { song: Song; query: URLSearchParams }) {
     };
   }, [engine]);
 
+  // cada rodada de um trecho em repetição
+  useEffect(() => {
+    engine.onPass = (r) => {
+      if (r.mode === 'listen') return;
+      const f = focusRef.current;
+      const streak = r.accuracy >= 0.95 ? f.streak + 1 : 0;
+      let done = f.done;
+      if (streak >= 3 && !done) {
+        done = true;
+        recordActivity('focus', 10);
+      }
+      focusRef.current = { streak, done };
+      setFocus(focusRef.current);
+    };
+    return () => {
+      engine.onPass = undefined;
+    };
+  }, [engine]);
+  const resetFocus = () => {
+    focusRef.current = { streak: 0, done: false };
+    setFocus(focusRef.current);
+  };
+
   // fim da música
   useEffect(() => {
     engine.onFinish = (r) => {
       if (r.mode !== 'listen') recordSong(song.id, stepKey, r.accuracy, Math.round(r.tempoFactor * 100), r.full && r.hands.length === avail.length, song.title);
-      else if (stepKey) recordSong(song.id, stepKey, 1, Math.round(r.tempoFactor * 100), false, song.title);
+      else if (stepKey) recordSong(song.id, stepKey, 1, Math.round(r.tempoFactor * 100), false, song.title, { listen: true });
       setResult(r);
     };
     return () => {
@@ -214,7 +244,7 @@ function PlayerInner({ song, query }: { song: Song; query: URLSearchParams }) {
   // marcas no teclado
   const keyMarks = new Map<number, KeyMark>();
   const expected = engine.status === 'finished' ? [] : engine.expected();
-  if (st.showKeyHints) {
+  if (st.showKeyHints && !hideHints) {
     for (const e of expected) keyMarks.set(e.midi, { hint: e.hand === 'R' ? 'var(--rh)' : 'var(--lh)', label: e.finger ? String(e.finger) : undefined });
   }
   const expSet = new Set(expected.map((e) => e.midi));
@@ -250,6 +280,7 @@ function PlayerInner({ song, query }: { song: Song; query: URLSearchParams }) {
         const a = Math.min(selecting, m);
         const b = Math.max(selecting, m);
         engine.setOptions({ loop: [a, b], repeat: true });
+        resetFocus();
         setSelecting(null);
       }
     },
@@ -349,6 +380,58 @@ function PlayerInner({ song, query }: { song: Song; query: URLSearchParams }) {
         <div style={{ padding: '0 12px' }}>
           <MicHelp />
         </div>
+        {opts.loop && opts.repeat && opts.mode !== 'listen' && selecting === null && (
+          <div className={'focus-panel' + (focus.done ? ' done' : '')}>
+            {focus.done && <Confetti pieces={24} />}
+            <span className="focus-ic">{focus.done ? '✅' : '🎯'}</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <b>{focus.done ? 'Trecho firme!' : 'Prática focada'}</b>
+              <div className="tiny muted">
+                {focus.done
+                  ? `3 rodadas seguidas com 95%+ a ${Math.round(opts.tempoFactor * 100)}% do andamento.`
+                  : 'Repita até acertar 3 rodadas seguidas (95%+). Errou? Vá mais devagar.'}
+              </div>
+            </div>
+            {!focus.done ? (
+              <span className="focus-dots" aria-label={`${Math.min(focus.streak, 3)} de 3 rodadas limpas`}>
+                {[0, 1, 2].map((i) => (
+                  <i key={i} className={i < focus.streak ? 'on' : ''} />
+                ))}
+              </span>
+            ) : (
+              <div className="row nowrap" style={{ gap: 6 }}>
+                {opts.tempoFactor < 1.5 && (
+                  <button
+                    className="btn sm primary"
+                    onClick={() => {
+                      engine.setOptions({ tempoFactor: Math.min(1.5, Math.round((opts.tempoFactor + 0.1) * 10) / 10) });
+                      resetFocus();
+                    }}
+                  >
+                    +10% andamento
+                  </button>
+                )}
+                <button
+                  className="btn sm"
+                  onClick={() => {
+                    engine.setOptions({ loop: null, repeat: false });
+                    resetFocus();
+                  }}
+                >
+                  Música inteira
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+        {hideHints && st.showKeyHints && (
+          <div className="hint-off small">
+            👀 Sem dicas no teclado: leia a partitura.
+            <button className="btn ghost sm" onClick={() => setHideHints(false)}>
+              Mostrar dicas
+            </button>
+          </div>
+        )}
         {selecting !== null && (
           <div className="banner small" style={{ margin: '8px 12px' }}>
             <Icon name="loop" size={18} />
@@ -485,7 +568,8 @@ function PlayerInner({ song, query }: { song: Song; query: URLSearchParams }) {
             }}
             onPracticeMeasures={(ms) => {
               setResult(null);
-              engine.setOptions({ loop: [ms[0], ms[ms.length - 1]], repeat: true, mode: 'wait' });
+              engine.setOptions({ loop: [ms[0], ms[ms.length - 1]], repeat: true, mode: 'wait', tempoFactor: Math.min(opts.tempoFactor, 0.7) });
+              resetFocus();
             }}
             next={
               nextStep && (result.mode === 'listen' || result.accuracy >= (planStep?.target ?? 0.8))
@@ -574,8 +658,8 @@ function ResultView({
         <div className="banner small" style={{ textAlign: 'left', margin: '10px 0' }}>
           <Icon name="target" size={18} />
           <div style={{ flex: 1 }}>
-            Compassos com mais erros: <b>{worst.map((m) => m + 1).join(', ')}</b>. Praticar só esses trechos devagar costuma resolver mais rápido
-            do que repetir a música toda.
+            Compassos com mais erros: <b>{worst.map((m) => m + 1).join(', ')}</b>. Isole esse trecho, vá mais devagar e repita até sair 3 vezes
+            seguidas sem erro — é o que fazem os pianistas que mais evoluem.
           </div>
           <button className="btn sm" onClick={() => onPracticeMeasures(worst)}>
             Praticar
@@ -597,12 +681,14 @@ function ResultView({
               className="btn sm"
               disabled={!!sentMsg}
               onClick={() => {
-                void sendText(
+                void sendChatResult(
                   challenge.from,
+                  song,
+                  result.accuracy,
                   beat
                     ? `Topei seu desafio em “${song.title}” e fiz ${Math.round(result.accuracy * 100)}%! 🏆`
                     : `Tentei seu desafio em “${song.title}”: fiz ${Math.round(result.accuracy * 100)}%. Vou tentar de novo! 💪`,
-                );
+                ).catch(() => undefined);
                 setSentMsg('Resultado enviado!');
               }}
             >

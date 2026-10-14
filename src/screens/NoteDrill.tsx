@@ -8,6 +8,7 @@ import { progress } from '../state/progress';
 import { settings } from '../state/settings';
 import { midiName, spellMidi, isBlackKey, pitchToVexKey } from '../music/theory';
 import { addXp } from '../state/progress';
+import { usePracticeTime } from '../lib/usePracticeTime';
 
 type Clef = 'treble' | 'bass' | 'grand';
 type Range = 'pos' | 'staff' | 'ledger';
@@ -37,6 +38,7 @@ function poolFor(clef: Clef, range: Range, acc: boolean): string[] {
 }
 
 export default function NoteDrill({ query }: { query?: URLSearchParams }) {
+  usePracticeTime();
   const st = useStore(settings);
   const p = useStore(progress);
   const [clef, setClef] = useState<Clef>((query?.get('clave') as Clef) || 'treble');

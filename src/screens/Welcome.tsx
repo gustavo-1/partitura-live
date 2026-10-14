@@ -57,6 +57,27 @@ export function Welcome() {
       <div className="welcome-step">
         <span className="num">3</span>
         <div style={{ flex: 1 }}>
+          <b>Quanto tempo por dia você quer praticar?</b>
+          <div style={{ marginTop: 6 }}>
+            <Seg<string>
+              value={String(s.dailyGoalMin)}
+              onChange={(v) => settings.set({ dailyGoalMin: Number(v) })}
+              options={[
+                { value: '5', label: '5 min' },
+                { value: '10', label: '10 min' },
+                { value: '15', label: '15 min' },
+                { value: '30', label: '30 min' },
+              ]}
+            />
+          </div>
+          <p className="tiny muted" style={{ margin: '4px 0 0' }}>
+            Pouco todo dia rende mais do que muito de vez em quando. Dá para mudar depois nas configurações.
+          </p>
+        </div>
+      </div>
+      <div className="welcome-step">
+        <span className="num">4</span>
+        <div style={{ flex: 1 }}>
           <b>Deixe o app ouvir seu teclado</b>
           <p className="small muted" style={{ margin: '4px 0 6px' }}>
             Coloque o aparelho perto do teclado, num lugar silencioso, e permita o microfone. Nada é gravado nem enviado: o som é analisado só no
@@ -69,7 +90,7 @@ export function Welcome() {
       </div>
       {acc.status !== 'disabled' && (
         <div className="welcome-step">
-          <span className="num">4</span>
+          <span className="num">5</span>
           <div style={{ flex: 1 }}>
             <b>Salvar na nuvem (opcional)</b>
             <p className="small muted" style={{ margin: '4px 0 6px' }}>

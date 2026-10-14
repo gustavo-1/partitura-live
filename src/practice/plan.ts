@@ -4,8 +4,9 @@ import type { PracticeMode } from './engine';
 
 /**
  * Plano de estudo de uma música, seguindo práticas consagradas de ensino:
- * dividir em trechos (chunking), mãos separadas antes de juntas, começar devagar
- * no modo "espera" (sem pressão de tempo) e aumentar o andamento gradualmente.
+ * ouvir antes de tocar (modelagem), dividir em trechos (chunking), mãos separadas
+ * antes de juntas, começar devagar no modo "espera" (sem pressão de tempo),
+ * aumentar o andamento gradualmente e retirar as dicas no fim (para ler de verdade).
  */
 export interface PlanStep {
   key: string;
@@ -17,6 +18,8 @@ export interface PlanStep {
   loop: [number, number] | null;
   target: number; // precisão mínima para concluir
   section?: number;
+  /** sem dicas no teclado (só a partitura): a ajuda vai sumindo nas etapas finais */
+  noHints?: boolean;
 }
 
 export interface StudyPlan {
@@ -118,22 +121,24 @@ export function studyPlan(song: Song): StudyPlan {
   steps.push({
     key: 'full-75',
     title: 'Música inteira a 75%',
-    desc: 'Agora no tempo, um pouco mais devagar que o original.',
+    desc: 'Agora no tempo, um pouco mais devagar que o original — e sem dicas no teclado: leia a partitura.',
     hands,
     mode: 'tempo',
     tempo: 0.75,
     loop: null,
     target: 0.85,
+    noHints: true,
   });
   steps.push({
     key: 'full-100',
     title: 'Andamento original',
-    desc: 'O desafio final: a música inteira no andamento original.',
+    desc: 'O desafio final: a música inteira no andamento original, lendo a partitura.',
     hands,
     mode: 'tempo',
     tempo: 1,
     loop: null,
     target: 0.9,
+    noHints: true,
   });
   return { sections, steps };
 }
@@ -146,5 +151,6 @@ export function stepUrl(songId: string, st: PlanStep): string {
     step: st.key,
   });
   if (st.loop) q.set('loop', `${st.loop[0]}-${st.loop[1]}`);
+  if (st.noHints) q.set('dicas', '0');
   return `/tocar/${encodeURIComponent(songId)}?${q.toString()}`;
 }

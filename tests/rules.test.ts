@@ -6,6 +6,8 @@ import { afterAll, beforeAll, beforeEach, describe, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { assertFails, assertSucceeds, initializeTestEnvironment, type RulesTestEnvironment } from '@firebase/rules-unit-testing';
+import firebase from 'firebase/compat/app';
+import 'firebase/compat/firestore';
 
 const HOST = process.env.FIRESTORE_EMULATOR_HOST;
 let env: RulesTestEnvironment;
@@ -105,5 +107,63 @@ describe.skipIf(!HOST)('regras do Firestore', () => {
     await assertSucceeds(db('alice').doc(ref.path).update({ read: true }));
     await assertFails(db('alice').doc(ref.path).update({ text: 'editado' }));
     await assertSucceeds(db('alice').doc(ref.path).delete());
+  });
+  it('conversas: só os dois amigos leem e escrevem; cada um mexe só no que é seu', async () => {
+    const FV = firebase.firestore.FieldValue;
+    const chatMsg = (from: string, extra: Record<string, unknown> = {}) => ({ from, type: 'text', text: 'oi!', at: FV.serverTimestamp(), ...extra });
+    const send = (who: string, extra: Record<string, unknown> = {}) => {
+      const d = db(who);
+      const chat = d.doc('chats/alice_bob');
+      const b = d.batch();
+      b.set(chat.collection('messages').doc(), chatMsg(who, extra));
+      b.set(
+        chat,
+        { members: ['alice', 'bob'], updatedAt: FV.serverTimestamp(), last: { from: who, type: 'text', text: 'oi!', at: FV.serverTimestamp() }, sent: { [who]: FV.increment(1) }, typing: { [who]: 0 } },
+        { merge: true },
+      );
+      return b.commit();
+    };
+    // sem amizade, nada feito
+    await assertFails(send('alice'));
+    await makeFriends('alice', 'bob');
+    await assertSucceeds(send('alice'));
+    await assertSucceeds(send('bob'));
+    await assertSucceeds(send('alice'));
+    // de fora não lê nem escreve
+    await assertFails(db('carol').doc('chats/alice_bob').get());
+    await assertFails(db('carol').collection('chats/alice_bob/messages').get());
+    await assertFails(db('carol').collection('chats/alice_bob/messages').add(chatMsg('carol')));
+    // os dois leem a conversa e as mensagens
+    await assertSucceeds(db('bob').doc('chats/alice_bob').get());
+    await assertSucceeds(db('bob').collection('chats').where('members', 'array-contains', 'bob').get());
+    const msgs = await db('bob').collection('chats/alice_bob/messages').orderBy('at').get();
+    if (msgs.size !== 3) throw new Error('esperava 3 mensagens, veio ' + msgs.size);
+    // não dá para assinar como outra pessoa, mudar a hora, mandar tipo estranho ou campo extra
+    await assertFails(db('bob').collection('chats/alice_bob/messages').add(chatMsg('alice')));
+    await assertFails(db('bob').collection('chats/alice_bob/messages').add(chatMsg('bob', { at: new Date(2000, 0, 1) })));
+    await assertFails(db('bob').collection('chats/alice_bob/messages').add(chatMsg('bob', { type: 'virus' })));
+    await assertFails(db('bob').collection('chats/alice_bob/messages').add(chatMsg('bob', { admin: true })));
+    await assertFails(db('bob').collection('chats/alice_bob/messages').add(chatMsg('bob', { text: 'x'.repeat(1200) })));
+    // ids fora de ordem não valem
+    await assertFails(db('bob').collection('chats/bob_alice/messages').add(chatMsg('bob')));
+    // resumo: cada um só mexe nas próprias entradas
+    await assertSucceeds(db('bob').doc('chats/alice_bob').update({ 'seen.bob': 2, 'seenAt.bob': FV.serverTimestamp() }));
+    await assertSucceeds(db('bob').doc('chats/alice_bob').update({ 'typing.bob': Date.now() }));
+    await assertFails(db('bob').doc('chats/alice_bob').update({ 'seen.alice': 0 }));
+    await assertFails(db('bob').doc('chats/alice_bob').update({ 'typing.alice': 1 }));
+    await assertFails(db('bob').doc('chats/alice_bob').update({ 'sent.bob': 50 }));
+    await assertFails(db('bob').doc('chats/alice_bob').update({ last: { from: 'alice', type: 'text', text: 'falso', at: 1 } }));
+    await assertFails(db('bob').doc('chats/alice_bob').update({ members: ['bob', 'carol'] }));
+    // reações: só a própria
+    const m0 = msgs.docs[0].ref.path;
+    await assertSucceeds(db('bob').doc(m0).update({ 'reactions.bob': '❤️' }));
+    await assertFails(db('bob').doc(m0).update({ 'reactions.alice': '❤️' }));
+    await assertFails(db('bob').doc(m0).update({ text: 'editado' }));
+    // depois de desfazer a amizade: não envia mais, mas ainda pode marcar como lida e apagar
+    await env.withSecurityRulesDisabled((ctx) => ctx.firestore().doc('friendships/alice_bob').delete());
+    await assertFails(send('bob'));
+    await assertSucceeds(db('bob').doc('chats/alice_bob').update({ 'seen.bob': 3 }));
+    await assertSucceeds(db('bob').doc(m0).delete());
+    await assertSucceeds(db('alice').doc('chats/alice_bob').delete());
   });
 });

@@ -3,7 +3,8 @@ import { RhythmExercise } from './lesson/activities';
 import { Icon } from '../components/Icon';
 import { Seg } from '../components/ui';
 import { back } from '../lib/router';
-import { addXp } from '../state/progress';
+import { recordActivity } from '../state/progress';
+import { usePracticeTime } from '../lib/usePracticeTime';
 
 const CELLS: Record<number, string[][]> = {
   1: [['q', 'q', 'q', 'q'], ['h', 'h'], ['h', 'q', 'q'], ['q', 'q', 'h'], ['w']],
@@ -25,6 +26,7 @@ function makePattern(level: number): string {
 }
 
 export default function RhythmDrill() {
+  usePracticeTime();
   const [level, setLevel] = useState(1);
   const [tempo, setTempo] = useState(72);
   const [pattern, setPattern] = useState(() => makePattern(1));
@@ -66,7 +68,7 @@ export default function RhythmDrill() {
           tempo={tempo}
           onComplete={(s) => {
             setLast(s);
-            addXp(3 + s * 5);
+            recordActivity('rhythm', 3 + s * 5);
           }}
         />
         <div className="row" style={{ justifyContent: 'center', marginTop: 10 }}>

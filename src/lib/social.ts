@@ -4,17 +4,18 @@
  *  friendCodes/{CODE}      código de amigo -> uid
  *  friendRequests/{a_b}    pedido de amizade de a para b
  *  friendships/{a_b}       amizade (uids em ordem), campo members
- *  users/{uid}/inbox/{id}  mensagens recebidas de amigos (aplausos, desafios, músicas)
+ *  users/{uid}/inbox/{id}  caixa antiga de mensagens (só leitura; as conversas novas ficam em chats/, ver chat.ts)
  * As regras de segurança estão em firestore.rules.
  */
 import type { Unsubscribe } from 'firebase/firestore';
 import type { FB } from './firebase';
 import { createStore } from './store';
-import { progress, weekKey, weekStats, setFlag, addEvent, type ProgressEvent } from '../state/progress';
+import { progress, weekKey, weekStats, setFlag, addEvent, bumpDay, streakNow, type ProgressEvent } from '../state/progress';
 import { settings } from '../state/settings';
 import { allLessons } from '../data/curriculum';
 import { builtinSong } from '../data/songs';
 import type { Song } from '../music/types';
+import { deleteAllChats, sendChatCheer, sendChatChallenge, sendChatSong, sendChatText, startChats, stopChats } from './chat';
 
 export interface PublicProfile {
   uid: string;
@@ -26,6 +27,8 @@ export interface PublicProfile {
   streak: number;
   streakBest: number;
   lastDay: string;
+  /** proteções de sequência guardadas */
+  freezes?: number;
   lessonsDone: number;
   stars: number;
   songsPlayed: number;
@@ -123,6 +126,7 @@ export function startSocial(f: FB, user: { uid: string; name: string; photo?: st
   me = pendingIdentity ? { ...user, ...pendingIdentity } : user;
   pendingIdentity = null;
   social.replace({ ...initial, uid: user.uid });
+  startChats(f, user.uid);
   void (async () => {
     try {
       await ensureProfile();
@@ -143,6 +147,7 @@ export function stopSocial() {
   lastPublished = '';
   fb = null;
   me = null;
+  stopChats();
   social.replace({ ...initial });
 }
 
@@ -195,6 +200,7 @@ export function buildProfile(code: string): PublicProfile {
     streak: p.streak.current,
     streakBest: p.streak.best,
     lastDay: p.streak.lastDay,
+    freezes: p.freezes ?? 0,
     lessonsDone: done.length,
     stars: Object.values(p.lessons).reduce((a, l) => a + l.stars, 0),
     songsPlayed: Object.keys(p.songs).length,
@@ -353,48 +359,22 @@ export async function removeFriend(uid: string) {
 
 // ---------- mensagens ----------
 
-type OutMsg = Omit<InboxMsg, 'id' | 'from' | 'fromName' | 'fromPhoto' | 'fromAvatar' | 'createdAt' | 'read' | 'data'> & { data?: unknown };
-async function send(to: string, msg: OutMsg) {
-  if (!fb || !me) throw new Error('Entre na sua conta primeiro.');
-  const { fs, db } = fb;
-  await fs.addDoc(fs.collection(db, 'users', to, 'inbox'), {
-    from: me.uid,
-    fromName: me.name.slice(0, 40),
-    fromPhoto: me.photo,
-    fromAvatar: settings.get().avatar || undefined,
-    createdAt: Date.now(),
-    read: false,
-    ...msg,
-  });
-}
-
 export function sendCheer(to: string, text: string) {
-  return send(to, { type: 'cheer', text: text.slice(0, 200) });
+  return sendChatCheer(to, text.slice(0, 200));
 }
 
 export function sendText(to: string, text: string) {
-  return send(to, { type: 'text', text: text.slice(0, 200) });
+  return sendChatText(to, text);
 }
 
 export async function sendChallenge(to: string, song: Song, score: number, text?: string) {
-  if (!fb) return;
-  const builtin = !!builtinSong(song.id);
-  let data: unknown;
-  if (!builtin) {
-    const { packSong } = await import('./cloudSongs');
-    const bytes = packSong(song);
-    if (bytes.length < 900_000) data = fb.fs.Bytes.fromUint8Array(bytes);
-  }
-  await send(to, { type: 'challenge', songId: song.id, songTitle: song.title.slice(0, 120), score: Math.round(score * 1000) / 1000, text: text?.slice(0, 200), data });
   setFlag('challenge');
+  bumpDay('social');
+  await sendChatChallenge(to, song, score, text);
 }
 
-export async function sendSong(to: string, song: Song, text?: string) {
-  if (!fb) return;
-  const { packSong } = await import('./cloudSongs');
-  const bytes = packSong(song);
-  if (bytes.length > 900_000) throw new Error('Esta música é grande demais para enviar.');
-  await send(to, { type: 'song', songId: song.id, songTitle: song.title.slice(0, 120), text: text?.slice(0, 200), data: fb.fs.Bytes.fromUint8Array(bytes) });
+export function sendSong(to: string, song: Song, text?: string) {
+  return sendChatSong(to, song, text);
 }
 
 /** Música que veio numa mensagem (desafio ou envio). */
@@ -435,6 +415,7 @@ export async function deleteSocialData(f: FB, uid: string) {
   }
   const inbox = await fs.getDocs(fs.collection(db, 'users', uid, 'inbox')).catch(() => null);
   inbox?.docs.forEach((d) => tasks.push(fs.deleteDoc(d.ref)));
+  tasks.push(deleteAllChats(f, uid));
   await Promise.all(tasks);
   if (code) await fs.deleteDoc(fs.doc(db, 'friendCodes', code)).catch(() => undefined);
   await fs.deleteDoc(fs.doc(db, 'profiles', uid)).catch(() => undefined);
@@ -446,14 +427,9 @@ export function profileWeek(p: PublicProfile): { xp: number; minutes: number } {
   return p.week === weekKey() ? { xp: p.weekXp, minutes: p.weekMinutes } : { xp: 0, minutes: 0 };
 }
 
-/** Sequência ainda vale se praticou hoje ou ontem. */
-export function liveStreak(p: { streak: number; lastDay: string }): number {
-  if (!p.lastDay) return 0;
-  const d = new Date();
-  const t = (x: Date) => `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
-  const todayK = t(d);
-  d.setDate(d.getDate() - 1);
-  return p.lastDay === todayK || p.lastDay === t(d) ? p.streak : 0;
+/** Sequência que ainda vale: praticou hoje/ontem ou tem proteções que cobrem os dias perdidos. */
+export function liveStreak(p: { streak: number; lastDay: string; freezes?: number }): number {
+  return streakNow({ streak: { current: p.streak, lastDay: p.lastDay }, freezes: p.freezes }).days;
 }
 
 export interface FeedItem extends ProgressEvent {

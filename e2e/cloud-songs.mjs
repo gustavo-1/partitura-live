@@ -4,6 +4,7 @@ const FIX = new URL('../tests/fixtures/simple.musicxml', import.meta.url).pathna
 const browser = await chromium.launch();
 const log = (...a) => console.log(...a);
 const errors = [];
+const stamp = Date.now().toString(36);
 async function user(name) {
   const ctx = await browser.newContext({ viewport: { width: 420, height: 900 } });
   await ctx.addInitScript(() => { if (!localStorage.getItem('pl.settings')) localStorage.setItem('pl.settings', JSON.stringify({ onboarded: true })); });
@@ -35,7 +36,7 @@ await carol.page.goto(BASE + '#/perfil');
 await carol.page.click('text=Entrar com e-mail');
 await carol.page.click('text=Não tenho conta — criar');
 await carol.page.fill('input[placeholder="Seu nome"]', 'Carol');
-await carol.page.fill('input[type=email]', 'carol@teste.com');
+await carol.page.fill('input[type=email]', `carol-${stamp}@teste.com`);
 await carol.page.fill('input[type=password]', 'segredo123');
 await carol.page.click('button:has-text("Criar conta")');
 await carol.page.waitForSelector('.code-box', { timeout: 20000 });
@@ -44,15 +45,23 @@ log('Carol criou conta; aviso "só neste aparelho" antes do login:', banner);
 
 // 2) Outro aparelho da Carol: a música vem da nuvem
 const carol2 = await user('Carol-2');
-await login(carol2, 'carol@teste.com');
+await login(carol2, `carol-${stamp}@teste.com`);
 await carol2.page.goto(BASE + '#/musicas');
 await carol2.page.waitForSelector('.song-card h3:has-text("Teste Duas Pautas")', { timeout: 20000 });
 log('Outro aparelho da Carol: música importada chegou pela nuvem ✓');
 
-// 3) Alice (já existente) vira amiga da Carol e recebe a música
+// 3) Alice cria conta, vira amiga da Carol e recebe a música
 const alice = await user('Alice');
-const codeA = await login(alice, 'alice@teste.com');
-await carol.page.goto(BASE + '#/amigos');
+await alice.page.goto(BASE + '#/perfil');
+await alice.page.click('text=Entrar com e-mail');
+await alice.page.click('text=Não tenho conta — criar');
+await alice.page.fill('input[placeholder="Seu nome"]', 'Alice');
+await alice.page.fill('input[type=email]', `alice-${stamp}@teste.com`);
+await alice.page.fill('input[type=password]', 'segredo123');
+await alice.page.click('button:has-text("Criar conta")');
+await alice.page.waitForSelector('.code-box', { timeout: 20000 });
+const codeA = (await alice.page.textContent('.code-box')).trim();
+await carol.page.goto(BASE + '#/amigos?aba=friends');
 await carol.page.fill('input[aria-label="Código do amigo"]', codeA);
 await carol.page.click('button:has-text("Adicionar")');
 await carol.page.waitForSelector('text=Pedido enviado', { timeout: 10000 });
@@ -69,10 +78,11 @@ await carol.page.click('button:has-text("Enviar esta música")');
 await carol.page.click('.sheet .person-row:has-text("Alice")');
 await carol.page.waitForSelector('text=Música enviada', { timeout: 15000 });
 log('Carol enviou a música para Alice');
-await alice.page.goto(BASE + '#/amigos?aba=msgs');
+await alice.page.goto(BASE + '#/amigos?aba=conversas');
+await alice.page.click('.conv-row:has-text("Carol")');
 await alice.page.waitForSelector('button:has-text("Adicionar às minhas músicas")', { timeout: 15000 });
 await alice.page.click('button:has-text("Adicionar às minhas músicas")');
-await alice.page.waitForSelector('text=Adicionada às suas músicas', { timeout: 10000 });
+await alice.page.waitForSelector('text=Adicionada ✓', { timeout: 10000 });
 await alice.page.goto(BASE + '#/musicas');
 await alice.page.waitForSelector('.song-card h3:has-text("Teste Duas Pautas")', { timeout: 15000 });
 log('Alice tem a música na biblioteca ✓');

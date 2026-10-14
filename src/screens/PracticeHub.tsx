@@ -1,51 +1,96 @@
 import { useEffect, useRef, useState } from 'react';
 import { navigate } from '../lib/router';
-import { Icon, type IconName } from '../components/Icon';
+import { useStore } from '../lib/store';
+import { Icon } from '../components/Icon';
 import { Metronome } from '../audio/metronome';
 import { resumeAudio } from '../audio/context';
+import { dayCount, progress } from '../state/progress';
+import { dueCount } from '../practice/review';
 
-const TOOLS: { href: string; icon: IconName; title: string; desc: string }[] = [
+const TOOLS: { href: string; icon: string; title: string; desc: string; counter?: string }[] = [
   {
     href: '/treino/leitura',
-    icon: 'eye',
+    icon: '👀',
     title: 'Leitura de notas',
-    desc: 'Cartões com notas na pauta. O app repete mais as notas que você erra ou demora para reconhecer (repetição espaçada).',
+    desc: 'Cartões com notas na pauta. As que você erra ou demora para ler voltam mais vezes; as que domina voltam depois de alguns dias.',
+    counter: 'notes',
   },
   {
     href: '/treino/leitura-primeira-vista',
-    icon: 'sparkle',
+    icon: '✨',
     title: 'Leitura à primeira vista',
-    desc: 'Melodias novas geradas no seu nível — a melhor forma de ganhar fluência na leitura.',
+    desc: 'Melodias novas geradas no seu nível. Ler material novo todo dia é o que mais desenvolve a leitura.',
+    counter: 'sight',
   },
-  { href: '/treino/ritmo', icon: 'metronome', title: 'Ritmo', desc: 'Leia e bata ritmos com o metrônomo, do simples ao pontuado.' },
+  {
+    href: '/treino/ouvido',
+    icon: '👂',
+    title: 'Tocar de ouvido',
+    desc: 'Ouça uma melodia curta e toque de volta; depois veja como se escreve. Som antes do símbolo.',
+    counter: 'echo',
+  },
+  { href: '/treino/ritmo', icon: '🥁', title: 'Ritmo', desc: 'Leia e bata ritmos com o metrônomo, do simples ao pontuado.', counter: 'rhythm' },
   {
     href: '/treino/detector',
-    icon: 'mic',
+    icon: '🎙️',
     title: 'Microfone e afinação',
     desc: 'Veja quais notas o app está ouvindo, ajuste a sensibilidade e teste seu teclado.',
   },
 ];
 
 export function PracticeHub() {
+  const p = useStore(progress);
+  const due = dueCount(p);
+  const reviewed = dayCount(p, 'reviews') > 0;
   return (
     <div>
       <div className="page-header">
         <h1>Treino</h1>
       </div>
-      <p className="muted">Exercícios curtos para fazer todos os dias. 10 minutos de leitura diária valem mais do que uma hora por semana.</p>
+      <p className="muted">Exercícios curtos para fazer todos os dias. Dez minutos de leitura diária valem mais do que uma hora por semana.</p>
+
+      <button className={'card review-cta big' + (reviewed ? ' done' : '')} onClick={() => navigate('/treino/revisao')}>
+        <span className="review-ic-sm">{reviewed ? '✅' : '🧠'}</span>
+        <span style={{ flex: 1, textAlign: 'left' }}>
+          <b>Revisão do dia</b>
+          <span className="small muted" style={{ display: 'block' }}>
+            {reviewed
+              ? 'Feita hoje. Quer outra rodada?'
+              : due > 0
+                ? `${due} ${due === 1 ? 'nota pronta' : 'notas prontas'} para revisar + conceitos, ritmo e ouvido, misturados. ~3 min.`
+                : 'Notas, conceitos, ritmo e ouvido, misturados. ~3 min.'}
+          </span>
+        </span>
+        <Icon name="next" />
+      </button>
+
       <div className="grid cols-2">
-        {TOOLS.map((t) => (
-          <button key={t.href} className="card song-card" onClick={() => navigate(t.href)}>
-            <Icon name={t.icon} size={28} />
-            <h3>{t.title}</h3>
-            <div className="small muted">{t.desc}</div>
-          </button>
-        ))}
+        {TOOLS.map((t) => {
+          const n = t.counter ? dayCount(p, t.counter) : 0;
+          return (
+            <button key={t.href} className="card song-card tool-card" onClick={() => navigate(t.href)}>
+              <span className="quick-ic">{t.icon}</span>
+              <h3>{t.title}</h3>
+              <div className="small muted">{t.desc}</div>
+              {n > 0 && <span className="chip ok-chip">hoje: {n}</span>}
+            </button>
+          );
+        })}
       </div>
       <div className="section-title">
         <h2>Metrônomo</h2>
       </div>
       <MetronomeWidget />
+      <a className="method-link card flat" href="#/metodo" style={{ marginTop: 16 }}>
+        <Icon name="brain" size={22} />
+        <span style={{ flex: 1 }}>
+          <b>Por que esses treinos?</b>
+          <span className="small muted" style={{ display: 'block' }}>
+            Veja as pesquisas por trás da revisão espaçada, da prática intercalada e do treino de ouvido.
+          </span>
+        </span>
+        <Icon name="next" />
+      </a>
     </div>
   );
 }

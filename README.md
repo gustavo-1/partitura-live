@@ -20,16 +20,21 @@ Funciona no navegador do celular, tablet ou computador, pode ser **instalado com
 | 👂 **Modo ouvir** | O app toca a música (som de piano real) enquanto o cursor acompanha a partitura. |
 | ✋ **Mãos separadas** | Pratique só a direita, só a esquerda ou juntas — e o app pode tocar a outra mão. |
 | 🔁 **Trechos em loop** | Toque em dois compassos para repetir só aquele trecho; opção de **acelerar aos poucos** (+5% a cada rodada com 90%+). |
-| 🗺️ **Trilha de aprendizado** | 9 unidades e 36 lições: teclado → ritmo → clave de Sol → clave de Fá → duas mãos → colcheias → acidentes e armaduras → acordes → leitura à primeira vista. |
-| 📋 **Plano de estudo por música** | Divide a música em trechos: ouvir → mão direita devagar → mão esquerda → mãos juntas → no tempo a 60% → música inteira a 75% → andamento original. |
-| 🃏 **Treino de leitura** | Cartões com notas na pauta que se adaptam: as notas que você erra ou demora mais aparecem mais (repetição espaçada). Mapa de calor das notas. |
+| 🗺️ **Trilha de aprendizado** | 9 unidades e 36 lições: teclado → ritmo → clave de Sol → clave de Fá → duas mãos → colcheias → acidentes e armaduras → acordes → leitura à primeira vista. Cada lição começa com um **aquecimento** de lições anteriores. |
+| 📋 **Plano de estudo por música** | Divide a música em trechos: ouvir → mão direita devagar → mão esquerda → mãos juntas → no tempo a 60% → música inteira a 75% → andamento original (as dicas no teclado somem nas etapas finais, para ler a partitura de verdade). |
+| 🎯 **Prática focada** | O app aponta os compassos com mais erros; você repete o trecho até sair **3 vezes seguidas sem erro** e só então acelera. |
+| 🧠 **Revisão do dia** | ~3 minutos misturando leitura das notas que estão no ponto de revisar (caixas de Leitner), perguntas de lições antigas, ritmo e ouvido. |
+| 👂 **Tocar de ouvido** | Ouça uma melodia curta, toque de volta e depois veja como ela se escreve (som antes do símbolo). Na trilha e como treino com 5 níveis. |
+| 🃏 **Treino de leitura** | Cartões com notas na pauta que se adaptam: as notas que você erra, demora ou que "venceram" a data de revisão aparecem mais (repetição espaçada). Mapa de calor das notas. |
 | ✨ **Leitura à primeira vista** | Exercícios novos gerados no seu nível, infinitos. |
 | 🥁 **Treino de ritmo** | Leia e bata ritmos com o metrônomo (toque na tela, barra de espaço ou qualquer tecla do piano). |
 | 📂 **Suas músicas** | Importe **MusicXML** (.musicxml/.mxl — ex.: exportado do MuseScore) ou **MIDI** (.mid, convertido em partitura automaticamente). |
-| 📈 **Progresso** | Estrelas, XP, sequência de dias, meta diária, tempo de prática, melhores resultados. Backup/restauração em JSON. |
+| 📈 **Progresso** | Estrelas, XP e **níveis**, sequência de dias, **meta diária em minutos** (você escolhe), tempo de prática, melhores resultados. Backup/restauração em JSON. |
+| 🎁 **Missões do dia** | 3 missões por dia (uma de revisar, uma de aprender, uma extra). Cumprir as 3 dá XP e uma **proteção de sequência** 🧊 (cobre um dia sem prática). |
 | 👤 **Conta** | Login com Google ou e-mail e senha. A sessão fica guardada no aparelho; o progresso vai para a nuvem e aparece em qualquer aparelho (funciona offline e sincroniza depois). |
-| 👥 **Amigos** | Código de amigo e link de convite, ranking semanal de XP, feed de atividades com aplausos 👏, mensagens, desafios ⚔️ ("supere meu recorde nesta música") e envio das músicas que você importou. |
-| 🏅 **Medalhas** | 23 conquistas (sequências, lições, músicas perfeitas, leitura rápida…), visíveis para os amigos. |
+| 💬 **Chat em tempo real** | Conversa com cada amigo: balões, "digitando…", "na conversa agora", ✓ entregue / ✓✓ visto, reações, aviso de mensagem nova (e notificação com o app em segundo plano), e cartões de aplauso, desafio ⚔️, resultado e música. |
+| 👥 **Amigos** | Código de amigo e link de convite, **liga semanal** de XP (todo mundo recomeça na segunda), **meta coletiva** de minutos do grupo, feed de atividades com aplausos 👏, desafios ("supere meu recorde nesta música") e envio das músicas que você importou. |
+| 🏅 **Medalhas** | 32 conquistas (sequências, lições, músicas perfeitas, leitura rápida, revisões, ouvido, meta do grupo…), visíveis para os amigos. |
 
 Sem teclado por perto? Use o **teclado na tela** ou o **teclado do computador** (`A W S E D F T G Y H U J K…`, `Z`/`X` mudam a oitava).
 
@@ -37,15 +42,19 @@ Sem teclado por perto? Use o **teclado na tela** ou o **teclado do computador** 
 
 ## Como o ensino foi pensado
 
-A trilha segue práticas consagradas em métodos de piano (Faber, Alfred, Bastien) e em pesquisas sobre leitura musical:
+A trilha segue práticas consagradas em métodos de piano (Faber, Alfred, Bastien, Kodály) e o que a pesquisa em aprendizagem e educação musical mostra que funciona. O resumo com as fontes também está dentro do app, em **“Como o app ensina”** (`#/metodo`).
 
-- **Geografia do teclado pelos grupos de 2 e 3 teclas pretas** — nunca contar teclas.
-- **Notas-guia (landmarks)**: Dó central, Sol da clave de Sol, Fá da clave de Fá, Dó5, Sol2…
-- **Leitura por intervalos** (passo/salto, direção) em vez de decorar cada nota ou usar frases mnemônicas.
-- **Ritmo separado da altura**, com pulsação e contagem em voz alta.
-- **Prática em partes (chunking), mãos separadas, devagar primeiro** e andamento crescente.
-- **Feedback imediato** e **repetição espaçada** nas notas difíceis.
-- **Leitura à primeira vista frequente** com material novo — o que mais desenvolve fluência.
+| Princípio | Evidência (resumo) | No app |
+|---|---|---|
+| **Prática deliberada: o “como” importa mais que o “quanto”** | Meta-análise: prática deliberada × desempenho musical r ≈ 0,61 (Platz et al., 2014). Em pianistas, o tempo de prática não previu o resultado; o que fez diferença foi isolar o erro, ajustar o andamento e repetir até ficar estável (Duke, Simmons & Cash, 2009). | Plano por trechos; compassos com mais erros; prática focada (3 rodadas seguidas sem erro, depois +10% de andamento). |
+| **Recuperação e espaçamento** | Tentar lembrar fixa mais do que reler (Roediger & Karpicke, 2006); revisões espaçadas duram mais (Cepeda et al., 2006). | Revisão do dia; aquecimento no início das lições; caixas de Leitner nas notas. |
+| **Prática intercalada** | Clarinetistas tiveram execuções mais bem avaliadas após prática intercalada (Carter & Grahn, 2016); em música os resultados ainda são mistos. | A revisão mistura leitura, conceitos, ritmo e ouvido; o aprendizado novo fica em blocos. |
+| **Som antes do símbolo** | Kodály, Gordon; tocar de ouvido se relaciona com leitura à primeira vista (McPherson et al., 1997). Evidência promissora, estudos pequenos. | Atividades “ouça e toque” na trilha e treino de ouvido; toda música começa por “Ouça”. |
+| **Ler por padrões** | Bons leitores olham à frente (distância olho-mão) e reconhecem grupos de notas (Perra et al., 2021); prática específica de leitura explica boa parte da diferença (Meinz & Hambrick, 2010). | Leitura por intervalos e notas-guia; primeira vista diária; dicas no teclado somem no fim do plano. |
+| **Feedback na medida** | Ajuda demais pode virar muleta (hipótese da orientação, Salmoni et al., 1984), mas a evidência é mista (Wulf & Shea, 2004). | Certo/errado imediato sempre; dicas visuais retiradas aos poucos. |
+| **Motivação que dura** | Metas próximas aumentam confiança e interesse (Bandura & Schunk, 1981); gamificação tem efeito pequeno a moderado e funciona melhor com colaboração junto da competição (Sailer & Homner, 2020); Teoria da Autodeterminação (Ryan & Deci, 2000). | Meta diária escolhida por você, missões que premiam prática de qualidade, proteção de sequência, liga semanal que recomeça, meta coletiva do grupo, aplausos. |
+
+Além disso: **geografia do teclado** pelos grupos de 2 e 3 teclas pretas, **notas-guia** (Dó central, Sol da clave de Sol, Fá da clave de Fá), **ritmo separado da altura** com contagem em voz alta, e **mãos separadas antes de juntas**.
 
 ---
 
@@ -107,7 +116,10 @@ O que vai para a conta: lições e estrelas, músicas praticadas e etapas do pla
 ```
 users/{uid}                 progresso + preferências (só o dono)
 users/{uid}/songs/{id}      músicas importadas, gzip (só o dono)
-users/{uid}/inbox/{id}      mensagens: aplauso, texto, desafio, música (amigos criam; dono lê/apaga)
+users/{uid}/inbox/{id}      caixa de mensagens antiga (só leitura; aparece dentro das conversas)
+chats/{a_b}                 conversa entre dois amigos: última mensagem, contadores, visto, digitando, presença
+chats/{a_b}/messages/{id}   mensagens (texto, aplauso, desafio, resultado, música) — só os dois leem;
+                            só amigos enviam, assinadas por quem envia, com hora do servidor
 profiles/{uid}              resumo público (usuário logado lê um por vez; ninguém lista)
 friendCodes/{CODIGO}        código de amigo → uid (consulta exata; ninguém lista)
 friendRequests/{de_para}    pedidos de amizade
@@ -162,14 +174,14 @@ Dicas: aparelho a menos de 1 m do teclado, som de piano acústico, ambiente sile
 src/
   audio/       detector de notas, microfone, piano amostrado, metrônomo, entrada (mic/MIDI/tela/teclado)
   music/       modelo musical, notação textual, teoria, importadores MusicXML/MIDI, gerador de exercícios
-  practice/    motor de prática (espera/tempo/ouvir) e plano de estudo
+  practice/    motor de prática (espera/tempo/ouvir), plano de estudo e revisão espaçada
   components/  partitura (VexFlow), teclado, cascata, mini-player, UI
   screens/     telas (início, trilha, lição, músicas, player, treinos, progresso, configurações)
   data/        músicas embutidas e currículo
-  state/       configurações e progresso (localStorage)
-  lib/         roteador, store, IndexedDB, Firebase (conta, sincronização, amigos, músicas na nuvem)
+  state/       configurações, progresso (localStorage) e gamificação (níveis, missões, metas)
+  lib/         roteador, store, IndexedDB, Firebase (conta, sincronização, amigos, chat, músicas na nuvem)
 public/        ícones, manifesto PWA, service worker, amostras de piano
-tests/         testes (notação, importadores, currículo, mesclagem, detector)
+tests/         testes (notação, importadores, currículo, mesclagem, gamificação, revisão, regras, detector)
 ```
 
 As músicas e exercícios embutidos usam uma notação textual compacta (`src/music/notation.ts`), por exemplo:
@@ -183,7 +195,7 @@ lh: 'C3w@5 | G3w@1 | (C3 E3 G3)w | ...'
 
 ### Testes ponta a ponta
 
-Veja [`e2e/README.md`](e2e/README.md): simulam duas pessoas usando o app (contas, amizade, ranking, desafios, músicas na nuvem) com os emuladores do Firebase.
+Veja [`e2e/README.md`](e2e/README.md): simulam duas pessoas usando o app (contas, amizade, liga, chat em tempo real, desafios, músicas na nuvem) com os emuladores do Firebase.
 
 ### Testes do detector com áudio real
 

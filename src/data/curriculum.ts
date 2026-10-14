@@ -1,13 +1,17 @@
 /**
  * Trilha de aprendizado.
  *
- * Princípios didáticos usados (inspirados em métodos como Faber, Alfred, Bastien e
- * em pesquisas sobre leitura musical):
+ * Princípios didáticos (métodos como Faber, Alfred e Bastien + pesquisas em aprendizagem):
  *  - Geografia do teclado pelos grupos de 2 e 3 teclas pretas (não contar teclas).
  *  - Notas-guia ("landmarks"): Dó central, Sol da clave de Sol, Fá da clave de Fá...
  *  - Leitura por intervalos (passo/salto, direção) em vez de decorar cada nota.
+ *  - Som antes do símbolo: tocar de ouvido antes/junto da leitura (Kodály, Gordon;
+ *    tocar de ouvido se relaciona com leitura à primeira vista — McPherson).
  *  - Ritmo trabalhado separadamente da altura, com pulsação e contagem.
  *  - Mãos separadas antes de juntas; prática lenta (modo espera) antes do tempo.
+ *  - Prática de recuperação e espaçamento: cada lição começa com um aquecimento de
+ *    lições anteriores e há uma revisão diária intercalada (Roediger & Karpicke;
+ *    Carter & Grahn, 2016, sobre prática intercalada em música).
  *  - Feedback imediato e repetição espaçada nas notas que você erra mais.
  */
 
@@ -51,7 +55,20 @@ export type Activity =
       target?: number;
       hands?: 'R' | 'L' | 'RL';
     }
-  | { type: 'sight'; level: number; intro?: string };
+  | { type: 'sight'; level: number; intro?: string }
+  | {
+      /** Ouça e toque de volta (de ouvido): som antes do símbolo */
+      type: 'echo';
+      intro?: string;
+      /** notas possíveis (midi), da mais grave para a mais aguda; a 1ª é a referência */
+      pool: number[];
+      length?: number;
+      count?: number;
+      tempo?: number;
+      clef?: 'treble' | 'bass';
+      /** melodias fixas (em vez de sorteadas) */
+      fixed?: number[][];
+    };
 
 export interface Lesson {
   id: string;
@@ -177,6 +194,13 @@ export const CURRICULUM: Unit[] = [
             answer: 1,
           },
           { type: 'find', targets: WHITE.slice(0, 3), count: 6 },
+          {
+            type: 'echo',
+            intro: 'Agora de ouvido: ouça a melodia e toque de volta. Ela começa no Dó (★). Ouvir antes de ler liga o som à tecla — e, depois, à nota escrita.',
+            pool: [60, 62, 64],
+            length: 3,
+            count: 2,
+          },
         ],
       },
       {
@@ -222,6 +246,13 @@ export const CURRICULUM: Unit[] = [
             title: 'Posição de Dó (mão direita)',
             text: 'Coloque o **polegar (1) no Dó central** e um dedo em cada tecla branca: 1-Dó, 2-Ré, 3-Mi, 4-Fá, 5-Sol.\n\nEssa é a **posição de Dó**. Muitas músicas iniciais usam só essas cinco notas!',
             keys: { lo: 55, hi: 72, highlight: [60, 62, 64, 65, 67], labels: C_POS_RH, color: '#3b82f6' },
+          },
+          {
+            type: 'echo',
+            intro: 'Com a mão na posição de Dó, toque de ouvido. Cada dedo já está sobre a sua tecla.',
+            pool: [60, 62, 64, 65, 67],
+            length: 3,
+            count: 2,
           },
           {
             type: 'play',
@@ -410,6 +441,13 @@ export const CURRICULUM: Unit[] = [
           { type: 'quiz', question: 'E agora?', options: ['Passo', 'Salto'], answer: 0, staff: { rh: 'F4h E4h' } },
           { type: 'quiz', question: 'E agora?', options: ['Passo', 'Salto'], answer: 1, staff: { rh: 'D4h F4h' } },
           {
+            type: 'echo',
+            intro: 'Passos e saltos de ouvido: o passo soa "vizinho", o salto pula uma nota. Depois de acertar, veja como cada movimento aparece na pauta.',
+            pool: [60, 62, 64, 65, 67],
+            length: 4,
+            count: 3,
+          },
+          {
             type: 'play',
             intro: 'Saltos de terça: pense "pula uma tecla" a cada movimento.',
             spec: { rh: 'C4q@1 E4@3 D4@2 F4@4 | E4@3 G4@5 F4@4 D4@2 | C4@1 E4@3 G4h@5 | C4w@1', tempo: 72 },
@@ -460,6 +498,14 @@ export const CURRICULUM: Unit[] = [
             text: 'Na mão esquerda, a posição de Dó começa com o **dedo 5 (mínimo) no Dó3**, uma oitava abaixo do Dó central:\n\n5-Dó · 4-Ré · 3-Mi · 2-Fá · 1-Sol\n\nRepare: o **polegar** fica no **Sol**, perto do centro do teclado.',
             staff: { lh: 'C3q D3 E3 F3 | G3w', names: true },
             keys: { lo: 43, hi: 62, highlight: [48, 50, 52, 53, 55], labels: C_POS_LH, color: '#f97316' },
+          },
+          {
+            type: 'echo',
+            intro: 'Mão esquerda de ouvido: a melodia começa no Dó3 (★, dedo 5).',
+            pool: [48, 50, 52, 53, 55],
+            length: 3,
+            count: 2,
+            clef: 'bass',
           },
           { type: 'read', clef: 'bass', pool: ['C3', 'D3', 'E3', 'F3', 'G3'], count: 10 },
           {
@@ -622,6 +668,13 @@ export const CURRICULUM: Unit[] = [
             keys: { lo: 64, hi: 79, highlight: [67, 69, 71, 72, 74], labels: G_POS_RH, color: '#3b82f6' },
           },
           { type: 'read', clef: 'treble', pool: ['G4', 'A4', 'B4', 'C5', 'D5'], count: 10 },
+          {
+            type: 'echo',
+            intro: 'De ouvido na posição de Sol: começa no Sol (★).',
+            pool: [67, 69, 71, 72, 74],
+            length: 4,
+            count: 2,
+          },
           {
             type: 'play',
             spec: { rh: 'G4q@1 A4@2 B4@3 C5@4 | D5@5 C5@4 B4@3 A4@2 | G4@1 B4@3 D5h@5 | G4w@1', key: 1, tempo: 76 },

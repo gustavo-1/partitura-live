@@ -27,8 +27,9 @@ const alice = await user('Alice');
 const bob = await user('Bob');
 
 // 1) contas
-const codeA = await signUp(alice, 'alice@teste.com');
-const codeB = await signUp(bob, 'bob@teste.com');
+const stamp = Date.now().toString(36);
+const codeA = await signUp(alice, `alice-${stamp}@teste.com`);
+const codeB = await signUp(bob, `bob-${stamp}@teste.com`);
 log('códigos', codeA, codeB);
 
 // 2) Alice toca uma música antes (gera atividade/medalha) usando o teclado do computador
@@ -40,7 +41,7 @@ await alice.page.waitForSelector('.result-hero', { timeout: 15000 });
 log('Alice resultado:', (await alice.page.textContent('.result-hero .big')).trim());
 
 // 3) Bob adiciona Alice pelo código
-await bob.page.goto(BASE + '#/amigos');
+await bob.page.goto(BASE + '#/amigos?aba=friends');
 await bob.page.fill('input[aria-label="Código do amigo"]', codeA);
 await bob.page.click('button:has-text("Adicionar")');
 await bob.page.waitForSelector('text=Pedido enviado', { timeout: 10000 });
@@ -57,9 +58,9 @@ await alice.page.waitForSelector('.person-row b:has-text("Bob")', { timeout: 150
 log('Alice vê Bob na lista de amigos');
 
 // 5) Bob vê o ranking e a atividade da Alice e aplaude
-await bob.page.click('button[role=tab]:has-text("Ranking")');
+await bob.page.click('button[role=tab]:has-text("Liga da semana")');
 await bob.page.waitForSelector('.person-row b:has-text("Alice")', { timeout: 25000 }); await bob.page.waitForTimeout(5000);
-const ranking = await bob.page.$$eval('.tabs + .card .person-row', (rows) => rows.map((r) => r.innerText.replace(/\n+/g, ' | ')));
+const ranking = await bob.page.$$eval('.league-head + .card .person-row', (rows) => rows.map((r) => r.innerText.replace(/\n+/g, ' | ')));
 log('Ranking visto pelo Bob:', ranking);
 await bob.page.click('button[role=tab]:has-text("Atividade")');
 await bob.page.waitForSelector('.feed-item', { timeout: 25000 });
@@ -75,13 +76,16 @@ await alice.page.click('.sheet .person-row:has-text("Bob")');
 await alice.page.waitForSelector('text=Desafio enviado', { timeout: 10000 });
 log('Alice: desafio enviado');
 
-// 7) Alice recebeu o aplauso
-await alice.page.goto(BASE + '#/amigos?aba=msgs');
-await alice.page.waitForSelector('.msg-card', { timeout: 15000 });
-log('Mensagens da Alice:', await alice.page.$$eval('.msg-card', (els) => els.map((e) => e.innerText.replace(/\n+/g, ' | '))));
+// 7) Alice recebeu o aplauso na conversa com o Bob
+await alice.page.goto(BASE + '#/amigos?aba=conversas');
+await alice.page.waitForSelector('.conv-row:has-text("Bob")', { timeout: 15000 });
+await alice.page.click('.conv-row:has-text("Bob")');
+await alice.page.waitForSelector('.bubble', { timeout: 15000 });
+log('Conversa da Alice:', await alice.page.$$eval('.bubble', (els) => els.map((e) => e.innerText.replace(/\n+/g, ' | '))));
 
-// 8) Bob aceita o desafio
-await bob.page.goto(BASE + '#/amigos?aba=msgs');
+// 8) Bob aceita o desafio pela conversa
+await bob.page.goto(BASE + '#/amigos?aba=conversas');
+await bob.page.click('.conv-row:has-text("Alice")');
 await bob.page.waitForSelector('button:has-text("Aceitar desafio")', { timeout: 15000 });
 await bob.page.click('button:has-text("Aceitar desafio")');
 await bob.page.waitForSelector('.challenge-banner', { timeout: 15000 });
@@ -91,18 +95,18 @@ log('Bob no desafio:', (await bob.page.textContent('.challenge-banner')).trim())
 await alice.page.goto(BASE + '#/perfil');
 await alice.page.reload();
 await alice.page.waitForSelector('.code-box', { timeout: 20000 });
-const xpBefore = await alice.page.$eval('.kpi b', (b) => b.textContent);
+const xpBefore = await alice.page.$eval('.level-card .tiny', (b) => b.textContent.split(' XP')[0]);
 log('Alice continua logada após recarregar; XP:', xpBefore);
 await alice.page.click('button:has-text("Sair")');
 await alice.page.waitForSelector('text=Entrar com Google', { timeout: 15000 });
-const xpOut = await alice.page.$eval('.kpi b', (b) => b.textContent);
+const xpOut = await alice.page.$eval('.level-card .tiny', (b) => b.textContent.split(' XP')[0]);
 await alice.page.click('text=Entrar com e-mail');
-await alice.page.fill('input[type=email]', 'alice@teste.com');
+await alice.page.fill('input[type=email]', `alice-${stamp}@teste.com`);
 await alice.page.fill('input[type=password]', 'segredo123');
 await alice.page.click('form button.btn.primary');
 await alice.page.waitForSelector('.code-box', { timeout: 20000 });
 await alice.page.waitForTimeout(1500);
-const xpIn = await alice.page.$eval('.kpi b', (b) => b.textContent);
+const xpIn = await alice.page.$eval('.level-card .tiny', (b) => b.textContent.split(' XP')[0]);
 log(`XP: antes de sair=${xpBefore}, depois de sair=${xpOut}, ao entrar de novo=${xpIn}`);
 
 await bob.page.goto(BASE + '#/amigos');

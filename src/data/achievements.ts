@@ -15,6 +15,7 @@ const totalLessons = CURRICULUM.reduce((a, u) => a + u.lessons.length, 0);
 const unitDone = (p: Progress, i: number) => CURRICULUM[i].lessons.every((l) => (p.lessons[l.id]?.stars ?? 0) > 0);
 const cards = (p: Progress) => Object.values(p.noteStats).reduce((a, s) => a + s.seen, 0);
 const songsAbove = (p: Progress, acc: number) => Object.values(p.songs).filter((s) => s.best >= acc).length;
+const total = (p: Progress, k: string) => (p.totals ?? {})[k] ?? 0;
 
 export const ACHIEVEMENTS: Achievement[] = [
   { id: 'primeira-licao', icon: '🎹', title: 'Primeiros passos', desc: 'Concluiu a primeira lição.', check: (p) => lessonsDone(p) >= 1 },
@@ -46,6 +47,15 @@ export const ACHIEVEMENTS: Achievement[] = [
   { id: 'xp-1000', icon: '💪', title: 'Dedicação', desc: 'Juntou 1.000 XP.', check: (p) => p.xp >= 1000 },
   { id: 'amizade', icon: '🤝', title: 'Em boa companhia', desc: 'Adicionou o primeiro amigo.', check: (p) => !!p.flags?.friend },
   { id: 'desafiante', icon: '⚔️', title: 'Desafiante', desc: 'Desafiou um amigo numa música.', check: (p) => !!p.flags?.challenge },
+  { id: 'banda-unida', icon: '🎺', title: 'Banda unida', desc: 'O grupo de amigos bateu a meta coletiva da semana.', check: (p) => !!p.flags?.group },
+  { id: 'nivel-5', icon: '🎓', title: 'Leitor(a) de pauta', desc: 'Chegou ao nível 5.', check: (p) => p.xp >= 500 },
+  { id: 'nivel-10', icon: '👑', title: 'Pianista de verdade', desc: 'Chegou ao nível 10.', check: (p) => p.xp >= 2250 },
+  { id: 'missoes-1', icon: '🎁', title: 'Dia completo', desc: 'Cumpriu todas as missões de um dia.', check: (p) => (p.questDays ?? 0) >= 1 },
+  { id: 'missoes-7', icon: '🗓️', title: 'Semana de missões', desc: 'Cumpriu todas as missões em 7 dias.', check: (p) => (p.questDays ?? 0) >= 7 },
+  { id: 'revisao-10', icon: '🧠', title: 'Memória de elefante', desc: 'Fez 10 revisões do dia.', check: (p) => total(p, 'reviews') >= 10 },
+  { id: 'ouvido-20', icon: '👂', title: 'Ouvido afiado', desc: 'Tocou 20 melodias de ouvido.', check: (p) => total(p, 'echo') >= 20 },
+  { id: 'trecho-10', icon: '🎯', title: 'Prática deliberada', desc: 'Firmou 10 trechos difíceis (3 rodadas seguidas sem erro).', check: (p) => total(p, 'focus') >= 10 },
+  { id: 'primeira-vista-20', icon: '📖', title: 'Leitor(a) corajoso(a)', desc: 'Leu 20 melodias à primeira vista.', check: (p) => total(p, 'sight') >= 20 },
 ];
 
 export function achievementById(id: string): Achievement | undefined {

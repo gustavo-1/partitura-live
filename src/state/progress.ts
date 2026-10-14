@@ -28,7 +28,7 @@ export interface NoteStat {
 
 /** Acontecimento recente (aparece no seu perfil e no feed dos amigos). */
 export interface ProgressEvent {
-  k: 'lesson' | 'song' | 'badge' | 'streak' | 'friend';
+  k: 'lesson' | 'song' | 'badge' | 'streak' | 'friend' | 'level' | 'quest';
   t: string;
   at: number;
   ref?: string;
@@ -47,6 +47,16 @@ export interface Progress {
   events?: ProgressEvent[];
   badges?: Record<string, number>; // conquista -> quando foi obtida
   flags?: Record<string, boolean>;
+  /** contadores do dia (para as missões diárias) */
+  day?: { d: string; c: Record<string, number> };
+  /** missões do dia: quais foram sorteadas e quais já foram cumpridas */
+  quests?: { d: string; ids: string[]; done: string[]; chest?: boolean };
+  /** dias em que cumpriu todas as missões */
+  questDays?: number;
+  /** totais acumulados dos contadores do dia (revisões, ouvido, trechos firmados…) */
+  totals?: Record<string, number>;
+  /** proteções de sequência guardadas (cobrem um dia sem prática cada) */
+  freezes?: number;
   updatedAt: number;
 }
 
@@ -62,6 +72,7 @@ export const emptyProgress: Progress = {
   events: [],
   badges: {},
   flags: {},
+  freezes: 0,
   updatedAt: 0,
 };
 
@@ -88,16 +99,51 @@ export function logPractice(seconds: number) {
     const practice = { ...p.practice, [d]: (p.practice[d] ?? 0) + seconds };
     let { current, best, lastDay } = p.streak;
     let events = p.events ?? [];
+    let freezes = p.freezes ?? 0;
     if (lastDay !== d) {
       const gap = lastDay ? daysBetween(lastDay, d) : 999;
-      current = gap === 1 ? current + 1 : 1;
+      const missed = gap - 1;
+      if (gap === 1) current += 1;
+      else if (lastDay && missed > 0 && missed <= freezes) {
+        // a proteção cobre os dias perdidos e a sequência continua
+        freezes -= missed;
+        current += 1;
+        events = pushEvent(events, { k: 'streak', t: `Usou ${missed === 1 ? 'uma proteção' : `${missed} proteções`} de sequência 🧊`, at: Date.now() });
+      } else current = 1;
       best = Math.max(best, current);
       lastDay = d;
       if ([3, 7, 14, 30, 50, 100, 200, 365].includes(current)) events = pushEvent(events, { k: 'streak', t: `Chegou a ${current} dias seguidos de prática`, at: Date.now() });
     }
-    return { ...p, practice, events, streak: { current, best, lastDay }, updatedAt: Date.now() };
+    return { ...p, practice, events, freezes, streak: { current, best, lastDay }, updatedAt: Date.now() };
   });
   checkBadges();
+}
+
+/** Sequência que vale agora: praticou hoje/ontem, ou as proteções cobrem os dias perdidos. */
+export function streakNow(p: { streak: { current: number; lastDay: string }; freezes?: number }, d = today()): { days: number; protectedDays: number; doneToday: boolean } {
+  const { current, lastDay } = p.streak;
+  if (!lastDay) return { days: 0, protectedDays: 0, doneToday: false };
+  const gap = daysBetween(lastDay, d);
+  if (gap <= 0) return { days: current, protectedDays: 0, doneToday: true };
+  if (gap === 1) return { days: current, protectedDays: 0, doneToday: false };
+  const missed = gap - 1;
+  if (missed <= (p.freezes ?? 0)) return { days: current, protectedDays: missed, doneToday: false };
+  return { days: 0, protectedDays: 0, doneToday: false };
+}
+
+/** Soma em um contador do dia (missões diárias). */
+export function bumpDay(key: string, n = 1) {
+  const d = today();
+  progress.set((p) => {
+    const c = p.day?.d === d ? { ...p.day.c } : {};
+    c[key] = (c[key] ?? 0) + n;
+    const totals = { ...(p.totals ?? {}), [key]: ((p.totals ?? {})[key] ?? 0) + n };
+    return { ...p, day: { d, c }, totals, updatedAt: Date.now() };
+  });
+}
+
+export function dayCount(p: Progress, key: string, d = today()): number {
+  return p.day?.d === d ? (p.day.c[key] ?? 0) : 0;
 }
 
 export function addXp(n: number) {
@@ -207,11 +253,12 @@ export function recordLesson(id: string, acc: number): { stars: number; improved
     return { ...p, lessons: { ...p.lessons, [id]: next }, events, updatedAt: Date.now() };
   });
   addXp(10 + stars * 10);
+  if (stars > 0) bumpDay('lessons');
   checkBadges();
   return { stars, improved };
 }
 
-export function recordSong(id: string, stepKey: string | null, acc: number, tempoPct: number, full: boolean, title?: string) {
+export function recordSong(id: string, stepKey: string | null, acc: number, tempoPct: number, full: boolean, title?: string, opts: { listen?: boolean } = {}) {
   progress.set((p) => {
     const prev: SongProgress = p.songs[id] ?? { best: 0, plays: 0, lastPlayed: 0, steps: {} };
     const steps = { ...prev.steps };
@@ -231,7 +278,11 @@ export function recordSong(id: string, stepKey: string | null, acc: number, temp
     const songTitles = title ? { ...(p.songTitles ?? {}), [id]: title } : p.songTitles;
     return { ...p, songs: { ...p.songs, [id]: next }, songTitles, events, updatedAt: Date.now() };
   });
-  addXp(5 + acc * 15);
+  if (opts.listen) addXp(3);
+  else {
+    addXp(5 + acc * 15);
+    if (acc >= 0.8) bumpDay('songs80');
+  }
   checkBadges();
 }
 
@@ -249,7 +300,15 @@ export function recordNoteRead(key: string, correct: boolean, ms: number) {
     };
     return { ...p, noteStats: { ...p.noteStats, [key]: next }, updatedAt: Date.now() };
   });
+  if (correct) bumpDay('notes');
   if (Math.random() < 0.2) checkBadges();
+}
+
+/** Atividade concluída fora da trilha (revisão, ouvido, ritmo, primeira vista, trecho firmado). */
+export function recordActivity(key: 'reviews' | 'echo' | 'rhythm' | 'sight' | 'focus', xp: number) {
+  bumpDay(key);
+  if (xp > 0) addXp(xp);
+  checkBadges();
 }
 
 export function minutesToday(p: Progress): number {
@@ -311,6 +370,20 @@ export function mergeProgress(a: Progress, b: Progress): Progress {
     .slice(0, MAX_EVENTS);
   const badges: Record<string, number> = { ...(a.badges ?? {}) };
   for (const [k, v] of Object.entries(b.badges ?? {})) badges[k] = Math.min(badges[k] ?? Infinity, v);
+  // contadores do dia: mesmo dia -> maior de cada; dias diferentes -> o mais recente
+  let day = a.day ?? b.day;
+  if (a.day && b.day) {
+    if (a.day.d === b.day.d) {
+      const c = { ...a.day.c };
+      for (const [k, v] of Object.entries(b.day.c)) c[k] = Math.max(c[k] ?? 0, v);
+      day = { d: a.day.d, c };
+    } else day = a.day.d > b.day.d ? a.day : b.day;
+  }
+  let quests = a.quests ?? b.quests;
+  if (a.quests && b.quests) {
+    if (a.quests.d === b.quests.d) quests = { ...a.quests, done: [...new Set([...a.quests.done, ...b.quests.done])], chest: !!(a.quests.chest || b.quests.chest) };
+    else quests = a.quests.d > b.quests.d ? a.quests : b.quests;
+  }
   return {
     lessons,
     songs,
@@ -323,6 +396,13 @@ export function mergeProgress(a: Progress, b: Progress): Progress {
     events,
     badges,
     flags: { ...(b.flags ?? {}), ...(a.flags ?? {}) },
+    day,
+    quests,
+    questDays: Math.max(a.questDays ?? 0, b.questDays ?? 0),
+    totals: Object.fromEntries(
+      [...new Set([...Object.keys(a.totals ?? {}), ...Object.keys(b.totals ?? {})])].map((k) => [k, Math.max((a.totals ?? {})[k] ?? 0, (b.totals ?? {})[k] ?? 0)]),
+    ),
+    freezes: sa.lastDay >= sb.lastDay ? (a.freezes ?? 0) : (b.freezes ?? 0),
     updatedAt: Math.max(a.updatedAt, b.updatedAt ?? 0),
   };
 }

@@ -15,8 +15,11 @@ import { ProfileScreen } from './screens/ProfileScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 import { startAccount } from './lib/account';
 import { social } from './lib/social';
+import { chats } from './lib/chat';
+import { ChatToast } from './components/ChatToast';
 import { Welcome } from './screens/Welcome';
-import { BadgeToast } from './components/BadgeToast';
+import { CelebrationToast } from './components/Celebration';
+import { startGamification } from './state/gamification';
 
 const Player = lazy(() => import('./screens/Player'));
 const LessonScreen = lazy(() => import('./screens/LessonScreen'));
@@ -27,6 +30,10 @@ const DetectorScreen = lazy(() => import('./screens/DetectorScreen'));
 const SightReading = lazy(() => import('./screens/SightReading'));
 const FriendsScreen = lazy(() => import('./screens/FriendsScreen'));
 const FriendProfile = lazy(() => import('./screens/FriendProfile'));
+const ChatScreen = lazy(() => import('./screens/ChatScreen'));
+const ReviewScreen = lazy(() => import('./screens/ReviewScreen'));
+const EarTraining = lazy(() => import('./screens/EarTraining'));
+const MethodScreen = lazy(() => import('./screens/MethodScreen'));
 
 const NAV: { path: string; label: string; icon: IconName }[] = [
   { path: '/', label: 'Início', icon: 'home' },
@@ -40,7 +47,8 @@ export function App() {
   const route = useRoute();
   const s = useStore(settings);
   const soc = useStore(social);
-  const socialBadge = soc.incoming.length + soc.unread;
+  const ch = useStore(chats);
+  const socialBadge = soc.incoming.length + soc.unread + ch.unreadTotal;
 
   useEffect(() => {
     const root = document.documentElement;
@@ -60,9 +68,13 @@ export function App() {
     void startAccount();
   }, [s.firebaseConfig]);
 
+  useEffect(() => startGamification(social), []);
+
   const [first, second] = route.parts;
   let page: React.ReactNode;
   let full = false;
+  // conversa: ocupa a tela toda no celular, mas mantém a barra lateral no computador
+  let chatLayout = false;
   switch (first) {
     case undefined:
       page = <Home />;
@@ -89,7 +101,14 @@ export function App() {
       else if (second === 'ritmo') page = <RhythmDrill />;
       else if (second === 'detector') page = <DetectorScreen />;
       else if (second === 'leitura-primeira-vista') page = <SightReading />;
-      else page = <PracticeHub />;
+      else if (second === 'ouvido') page = <EarTraining />;
+      else if (second === 'revisao') {
+        page = <ReviewScreen />;
+        full = true;
+      } else page = <PracticeHub />;
+      break;
+    case 'metodo':
+      page = <MethodScreen />;
       break;
     case 'progresso':
     case 'perfil':
@@ -101,6 +120,10 @@ export function App() {
     case 'amigo':
       page = <FriendProfile uid={second ?? ''} />;
       break;
+    case 'chat':
+      page = <ChatScreen key={second} uid={second ?? ''} />;
+      chatLayout = true;
+      break;
     case 'config':
       page = <SettingsScreen />;
       break;
@@ -109,7 +132,7 @@ export function App() {
   }
 
   const activePath =
-    '/' + (first === 'licao' ? 'trilha' : first === 'musica' ? 'musicas' : first === 'amigo' ? 'amigos' : first === 'progresso' ? 'perfil' : (first ?? ''));
+    '/' + (first === 'licao' ? 'trilha' : first === 'musica' ? 'musicas' : first === 'amigo' || first === 'chat' ? 'amigos' : first === 'progresso' ? 'perfil' : (first ?? ''));
   const navLinks = (
     <>
       {NAV.map((n) => (
@@ -144,12 +167,13 @@ export function App() {
           </a>
         </nav>
       )}
-      <main className={'main' + (full ? ' full' : '')}>
+      <main className={'main' + (full ? ' full' : '') + (chatLayout ? ' chat-main' : '')}>
         <Suspense fallback={<div className="empty">Carregando…</div>}>{page}</Suspense>
       </main>
       {!s.onboarded && <Welcome />}
-      <BadgeToast />
-      {!full && (
+      <CelebrationToast />
+      <ChatToast />
+      {!full && !chatLayout && (
         <nav className="bottom-nav" aria-label="Navegação">
           {navLinks}
         </nav>

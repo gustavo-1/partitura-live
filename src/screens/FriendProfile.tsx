@@ -1,17 +1,15 @@
 import { useEffect, useState } from 'react';
 import { useStore } from '../lib/store';
-import { liveStreak, profileWeek, removeFriend, sendCheer, sendSong, sendText, social } from '../lib/social';
+import { liveStreak, profileWeek, removeFriend, sendCheer, social } from '../lib/social';
 import { account } from '../lib/account';
 import { back, navigate } from '../lib/router';
 import { Avatar } from '../components/Avatar';
 import { Icon } from '../components/Icon';
-import { Sheet } from '../components/ui';
 import { ACHIEVEMENTS } from '../data/achievements';
 import { builtinSong } from '../data/songs';
-import { getSong, listImported, type ImportedRecord } from '../data/library';
+import { getSong } from '../data/library';
+import { levelFor } from '../state/gamification';
 import { progress, weekStats } from '../state/progress';
-
-const QUICK = ['Bora praticar hoje? 🎹', 'Mandou muito bem! 👏', 'Não desiste, tá ficando ótimo! 💪', 'Te desafio a tocar mais hoje! ⚔️'];
 
 export default function FriendProfile({ uid }: { uid: string }) {
   const soc = useStore(social);
@@ -19,14 +17,7 @@ export default function FriendProfile({ uid }: { uid: string }) {
   const p = useStore(progress);
   const f = soc.friends[uid];
   const [sent, setSent] = useState<string | null>(null);
-  const [text, setText] = useState('');
-  const [songPick, setSongPick] = useState(false);
-  const [imported, setImported] = useState<ImportedRecord[]>([]);
   const [available, setAvailable] = useState<Set<string>>(new Set());
-
-  useEffect(() => {
-    void listImported().then(setImported);
-  }, []);
   // quais músicas do amigo eu também tenho (para "tentar superar")
   useEffect(() => {
     if (!f) return;
@@ -64,7 +55,10 @@ export default function FriendProfile({ uid }: { uid: string }) {
         <Avatar name={f.name} photo={f.photo} avatar={f.avatar} seed={uid} size={52} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <h1 style={{ margin: 0 }}>{f.name}</h1>
-          {f.current && <div className="small muted">Estudando: {f.current}</div>}
+          <div className="small muted">
+            Nível {levelFor(f.xp).level} · {levelFor(f.xp).title}
+            {f.current ? ` · estudando “${f.current}”` : ''}
+          </div>
         </div>
       </div>
 
@@ -92,54 +86,21 @@ export default function FriendProfile({ uid }: { uid: string }) {
         </div>
       </div>
 
-      <div className="card">
-        <h3>Interagir</h3>
-        <div className="row">
-          <button
-            className="btn"
-            onClick={() => {
-              void sendCheer(uid, `👏 ${acc.user?.name ?? 'Um amigo'} mandou um aplauso!`);
-              flash('Aplauso enviado! 👏');
-            }}
-          >
-            👏 Aplaudir
-          </button>
-          {QUICK.map((q) => (
-            <button
-              key={q}
-              className="btn sm ghost"
-              onClick={() => {
-                void sendText(uid, q);
-                flash('Mensagem enviada!');
-              }}
-            >
-              {q}
-            </button>
-          ))}
-        </div>
-        <form
-          className="row nowrap"
-          style={{ marginTop: 10 }}
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (!text.trim()) return;
-            void sendText(uid, text.trim());
-            setText('');
-            flash('Mensagem enviada!');
+      <div className="row friend-actions">
+        <button className="btn primary" onClick={() => navigate('/chat/' + uid)}>
+          <Icon name="chat" /> Conversar
+        </button>
+        <button
+          className="btn"
+          disabled={!!sent}
+          onClick={() => {
+            void sendCheer(uid, `👏 ${acc.user?.name?.split(' ')[0] ?? 'Um amigo'} mandou um aplauso!`).catch(() => undefined);
+            flash('Aplauso enviado! 👏');
           }}
         >
-          <input placeholder="Escreva uma mensagem curta…" value={text} onChange={(e) => setText(e.target.value)} maxLength={200} style={{ flex: 1, minWidth: 0 }} />
-          <button className="btn primary" disabled={!text.trim()}>
-            Enviar
-          </button>
-        </form>
-        <div className="row" style={{ marginTop: 10 }}>
-          <button className="btn sm" onClick={() => setSongPick(true)}>
-            <Icon name="music" /> Enviar uma música importada
-          </button>
-          <span className="small muted">Para desafiar, abra uma música e use “Desafiar amigo”.</span>
-        </div>
-        {sent && <p className="small" style={{ color: 'var(--ok)', marginBottom: 0 }}>{sent}</p>}
+          👏 Aplaudir
+        </button>
+        {sent && <span className="small" style={{ color: 'var(--ok)' }}>{sent}</span>}
       </div>
 
       {best.length > 0 && (
@@ -210,36 +171,6 @@ export default function FriendProfile({ uid }: { uid: string }) {
         Remover amizade
       </button>
 
-      <Sheet open={songPick} onClose={() => setSongPick(false)} title="Enviar música">
-        {imported.length === 0 ? (
-          <p className="muted">
-            Você ainda não importou músicas. As músicas que já vêm no app seus amigos também têm. <a href="#/musicas">Importar</a>
-          </p>
-        ) : (
-          imported.map((r) => (
-            <button
-              key={r.id}
-              className="person-row btn ghost"
-              style={{ width: '100%', justifyContent: 'flex-start', borderRadius: 0 }}
-              onClick={async () => {
-                setSongPick(false);
-                try {
-                  await sendSong(uid, r.song);
-                  flash(`“${r.song.title}” enviada!`);
-                } catch (e) {
-                  alert(String((e as Error).message ?? e));
-                }
-              }}
-            >
-              <Icon name="music" />
-              <span className="who" style={{ textAlign: 'left' }}>
-                <b>{r.song.title}</b>
-                <span className="small muted">{r.song.composer}</span>
-              </span>
-            </button>
-          ))
-        )}
-      </Sheet>
     </div>
   );
 }

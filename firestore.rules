@@ -8,6 +8,8 @@ rules_version = '2';
 //  friendCodes/{code}     código de amigo -> uid — consulta por código (sem listar)
 //  friendRequests/{a_b}   pedido de a para b
 //  friendships/{a_b}      amizade (uids em ordem alfabética)
+//  chats/{a_b}            conversa entre dois amigos (resumo, leitura, digitando)
+//  chats/{a_b}/messages   mensagens da conversa
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -102,6 +104,65 @@ service cloud.firestore {
         && exists(/databases/$(database)/documents/friendRequests/$(
              (request.resource.data.members[0] == me() ? request.resource.data.members[1] : request.resource.data.members[0]) + '_' + me()));
       allow delete: if signedIn() && me() in resource.data.members;
+    }
+
+    // ---------- conversas (id = uids em ordem alfabética) ----------
+    match /chats/{chatId} {
+      function parts() {
+        return chatId.split('_');
+      }
+      function isMember() {
+        return signedIn() && parts().size() == 2 && me() in parts() && chatId == pairId(parts()[0], parts()[1]);
+      }
+      function other() {
+        return parts()[0] == me() ? parts()[1] : parts()[0];
+      }
+      // cada um só mexe na própria entrada dos mapas (sent, seen, typing…)
+      function ownEntry(field, changed) {
+        return !(field in changed)
+          || (request.resource.data[field] is map
+              && request.resource.data[field].diff(resource == null ? {} : resource.data.get(field, {})).affectedKeys().hasOnly([me()]));
+      }
+      function validChat(changed) {
+        return ownEntry('sent', changed) && ownEntry('seen', changed) && ownEntry('seenAt', changed)
+          && ownEntry('typing', changed) && ownEntry('here', changed)
+          // mensagem enviada: o contador sobe de 1 em 1 e a prévia é de quem enviou
+          && (!('sent' in changed)
+              || request.resource.data.sent[me()] == (resource == null ? 0 : resource.data.get('sent', {}).get(me(), 0)) + 1)
+          && (!('last' in changed)
+              || (request.resource.data.last.from == me() && shortString(request.resource.data.last.text, 200)));
+      }
+
+      allow read: if signedIn() && me() in resource.data.members;
+      allow create: if isMember() && isFriend(other())
+        && request.resource.data.members == [parts()[0], parts()[1]]
+        && request.resource.data.keys().hasOnly(['members', 'updatedAt', 'last', 'sent', 'seen', 'seenAt', 'typing', 'here'])
+        && validChat(request.resource.data.keys());
+      allow update: if isMember()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['updatedAt', 'last', 'sent', 'seen', 'seenAt', 'typing', 'here'])
+        && validChat(request.resource.data.diff(resource.data).affectedKeys())
+        // conversar exige amizade; marcar como lida, não
+        && (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['seen', 'seenAt', 'here', 'typing']) || isFriend(other()));
+      allow delete: if isMember();
+
+      match /messages/{msgId} {
+        allow read: if isMember();
+        allow create: if isMember() && isFriend(other())
+          && request.resource.data.from == me()
+          && request.resource.data.keys().hasOnly(['from', 'type', 'text', 'songId', 'songTitle', 'score', 'data', 'at'])
+          && request.resource.data.type in ['text', 'cheer', 'challenge', 'song', 'result']
+          && request.resource.data.at == request.time
+          && optShortString(request.resource.data, 'text', 1000)
+          && optShortString(request.resource.data, 'songTitle', 160)
+          && optShortString(request.resource.data, 'songId', 200);
+        // reações: cada um só a sua
+        allow update: if isMember()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions'])
+          && request.resource.data.reactions.diff(resource.data.get('reactions', {})).affectedKeys().hasOnly([me()])
+          && (!(me() in request.resource.data.reactions) || shortString(request.resource.data.reactions[me()], 16));
+        // qualquer um dos dois pode apagar (apagar a conversa vale para os dois)
+        allow delete: if isMember();
+      }
     }
   }
 }

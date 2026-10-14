@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useStore } from '../lib/store';
-import { progress, today, weekStats } from '../state/progress';
+import { progress, streakNow, today, weekStats } from '../state/progress';
+import { levelFor, MAX_FREEZES } from '../state/gamification';
 import { AccountCard } from '../components/AccountCard';
 import { ACHIEVEMENTS } from '../data/achievements';
 import { settings } from '../state/settings';
@@ -19,6 +20,7 @@ export function ProfileScreen() {
   const done = lessons.filter((x) => p.lessons[x.lesson.id]?.stars > 0);
   const stars = Object.values(p.lessons).reduce((a, l) => a + l.stars, 0);
   const [songs, setSongs] = useState<Song[]>(builtinSongs());
+  const [allBadges, setAllBadges] = useState(false);
   useEffect(() => {
     listImported().then((imp) => setSongs([...builtinSongs(), ...imp.map((r) => r.song)]));
   }, []);
@@ -37,6 +39,8 @@ export function ProfileScreen() {
   const played = Object.entries(p.songs).sort((a, b) => b[1].lastPlayed - a[1].lastPlayed);
   const week = weekStats(p);
   const got = p.badges ?? {};
+  const lv = levelFor(p.xp);
+  const sn = streakNow(p);
   const badges = [...ACHIEVEMENTS].sort((a, b) => (got[b.id] ? 1 : 0) - (got[a.id] ? 1 : 0) || (got[b.id] ?? 0) - (got[a.id] ?? 0));
 
   return (
@@ -51,17 +55,32 @@ export function ProfileScreen() {
       <div className="section-title">
         <h2>Seu progresso</h2>
       </div>
-      <div className="stat-grid">
-        <div className="card flat kpi">
-          <span>Experiência</span>
-          <b>{p.xp} XP</b>
+      <div className="card level-card">
+        <div className="level-badge">{lv.level}</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <b>
+            Nível {lv.level} · {lv.title}
+          </b>
+          <ProgressBar value={lv.pct} />
+          <span className="tiny muted">
+            {p.xp} XP no total · faltam {lv.need - lv.into} XP para o nível {lv.level + 1}
+          </span>
         </div>
+      </div>
+      <div className="stat-grid">
         <div className="card flat kpi">
           <span>Sequência</span>
           <b>
-            <Icon name="fire" size={20} /> {p.streak.current} {p.streak.current === 1 ? 'dia' : 'dias'}
+            <Icon name="fire" size={20} /> {sn.days} {sn.days === 1 ? 'dia' : 'dias'}
           </b>
-          <span className="tiny">Recorde: {p.streak.best}</span>
+          <span className="tiny">
+            Recorde: {p.streak.best} · 🧊 {p.freezes ?? 0}/{MAX_FREEZES} proteções
+          </span>
+        </div>
+        <div className="card flat kpi">
+          <span>Missões</span>
+          <b>{p.questDays ?? 0} dias completos</b>
+          <span className="tiny">Cada dia completo dá uma proteção de sequência</span>
         </div>
         <div className="card flat kpi">
           <span>Tempo total</span>
@@ -93,7 +112,7 @@ export function ProfileScreen() {
         </span>
       </div>
       <div className="badge-grid">
-        {badges.map((a) => (
+        {(allBadges ? badges : badges.slice(0, Math.max(6, Object.keys(got).length + 4))).map((a) => (
           <div key={a.id} className={'badge-card' + (got[a.id] ? '' : ' locked')} title={a.desc}>
             <span className="ic">{a.icon}</span>
             <div>
@@ -103,6 +122,11 @@ export function ProfileScreen() {
           </div>
         ))}
       </div>
+      {badges.length > Math.max(6, Object.keys(got).length + 4) && (
+        <button className="btn ghost sm block" style={{ marginTop: 8 }} onClick={() => setAllBadges((v) => !v)}>
+          {allBadges ? 'Mostrar menos' : `Ver todas as ${badges.length} medalhas`}
+        </button>
+      )}
 
       <div className="section-title">
         <h2>Últimos 14 dias</h2>

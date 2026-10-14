@@ -5,9 +5,11 @@ import { Icon } from '../components/Icon';
 import { MicButton, MicHelp, Seg } from '../components/ui';
 import { back, navigate } from '../lib/router';
 import { registerTempSong } from '../data/library';
-import { addXp } from '../state/progress';
+import { recordActivity } from '../state/progress';
+import { usePracticeTime } from '../lib/usePracticeTime';
 
 export default function SightReading() {
+  usePracticeTime();
   const [level, setLevel] = useState(() => Number(localStorage.getItem('pl.sightLevel') ?? '1') || 1);
   const [seed, setSeed] = useState(() => Date.now());
   const [results, setResults] = useState<number[]>([]);
@@ -59,7 +61,7 @@ export default function SightReading() {
           onDone={(r) => {
             if (r.mode === 'listen') return;
             setResults((x) => [...x, r.accuracy]);
-            addXp(5 + r.accuracy * 10);
+            recordActivity('sight', 5 + r.accuracy * 10);
           }}
         />
         <div className="row" style={{ marginTop: 12 }}>

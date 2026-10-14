@@ -149,6 +149,7 @@ export function SettingsScreen() {
         </div>
         <div className="field">
           <span className="label">Meta diária: {s.dailyGoalMin} minutos</span>
+          <span className="tiny muted">Vale qualquer prática: lições, treinos, revisão e músicas. Cumprir a meta conta para as missões do dia.</span>
           <input type="range" min={5} max={60} step={5} value={s.dailyGoalMin} onChange={(e) => set({ dailyGoalMin: Number(e.target.value) })} />
         </div>
       </div>
@@ -239,7 +240,8 @@ export function SettingsScreen() {
       <div className="card flat">
         <h3>Sobre</h3>
         <p className="small muted" style={{ marginBottom: 4 }}>
-          Partitura Live — app livre e gratuito para aprender a ler partituras e tocar teclado.
+          Partitura Live — app livre e gratuito para aprender a ler partituras e tocar teclado.{' '}
+          <a href="#/metodo">Como o app ensina (e as pesquisas por trás)</a>.
         </p>
         <p className="tiny muted" style={{ margin: 0 }}>
           Partituras desenhadas com VexFlow (MIT). Som de piano: FluidR3_GM por Frank Wen, via midi-js-soundfonts (CC BY 3.0). Músicas
