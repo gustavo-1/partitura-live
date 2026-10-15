@@ -47,7 +47,7 @@ log('Carol criou conta; aviso "só neste aparelho" antes do login:', banner);
 const carol2 = await user('Carol-2');
 await login(carol2, `carol-${stamp}@teste.com`);
 await carol2.page.goto(BASE + '#/musicas');
-await carol2.page.waitForSelector('.song-card h3:has-text("Teste Duas Pautas")', { timeout: 20000 });
+await carol2.page.waitForSelector('.lib-item:has(.lib-status) h3:has-text("Teste Duas Pautas")', { timeout: 20000 });
 log('Outro aparelho da Carol: música importada chegou pela nuvem ✓');
 
 // 3) Alice cria conta, vira amiga da Carol e recebe a música
@@ -71,7 +71,7 @@ await alice.page.click('.person-row:has-text("Carol") button:has-text("Aceitar")
 log('Alice aceitou Carol');
 // Carol envia a música
 await carol.page.goto(BASE + '#/musicas');
-await carol.page.click('.song-card:has-text("Teste Duas Pautas")');
+await carol.page.click('.lib-item:has(.lib-status):has-text("Teste Duas Pautas") .song-card');
 await carol.page.waitForSelector('button:has-text("Enviar esta música")', { timeout: 20000 });
 await carol.page.waitForFunction(() => !document.querySelector('button.btn.sm.ghost:disabled'), null, { timeout: 15000 }).catch(() => {});
 await carol.page.click('button:has-text("Enviar esta música")');
@@ -84,7 +84,7 @@ await alice.page.waitForSelector('button:has-text("Adicionar às minhas músicas
 await alice.page.click('button:has-text("Adicionar às minhas músicas")');
 await alice.page.waitForSelector('text=Adicionada ✓', { timeout: 10000 });
 await alice.page.goto(BASE + '#/musicas');
-await alice.page.waitForSelector('.song-card h3:has-text("Teste Duas Pautas")', { timeout: 15000 });
+await alice.page.waitForSelector('.lib-item:has(.lib-status) h3:has-text("Teste Duas Pautas")', { timeout: 15000 });
 log('Alice tem a música na biblioteca ✓');
 log(errors.length ? 'ERROS:\n' + errors.join('\n') : 'sem erros no console');
 await browser.close();

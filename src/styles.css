@@ -2719,20 +2719,27 @@ body:has(.chat) .badge-toast {
     opacity: 0;
   }
 }
-.favorites-card {
-  margin-top: 16px;
-  background: linear-gradient(135deg, color-mix(in srgb, #ec4899 9%, var(--surface)), var(--surface));
+a.chip-btn {
+  color: var(--ink);
 }
-.fav-groups {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 10px 16px;
-}
-.fav-group {
+.lib-item {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
-a.chip-btn {
-  color: var(--ink);
+.lib-item .song-card {
+  flex: 1;
+}
+.lib-action {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+}
+.lib-item .song-card .row.between {
+  padding-right: 40px;
+}
+.lib-status {
+  display: flex;
+  justify-content: flex-start;
 }

@@ -15,6 +15,7 @@ import { emptyProgress, mergeProgress, progress, checkBadges, type Progress } fr
 import { settings, type Settings } from '../state/settings';
 import { startSocial, stopSocial, publishProfileSoon, setSocialIdentity } from './social';
 import { startCloudSongs, stopCloudSongs, clearLocalSongs } from './cloudSongs';
+import { expectRemote } from '../data/library';
 
 export interface AccountUser {
   uid: string;
@@ -78,12 +79,15 @@ export async function startAccount(): Promise<void> {
   if (!cfg) {
     fb = null;
     account.replace({ status: 'disabled', sync: 'idle' });
+    expectRemote(false);
     return;
   }
   account.set({ status: 'loading' });
+  expectRemote(true);
   fb = await getFirebase();
   if (!fb) {
     account.replace({ status: 'disabled', sync: 'error', message: 'Não foi possível iniciar o Firebase.' });
+    expectRemote(false);
     return;
   }
   const { authMod, auth } = fb;
@@ -94,6 +98,7 @@ export async function startAccount(): Promise<void> {
     else {
       void teardown();
       account.set({ status: 'signed-out', user: undefined, sync: 'idle', mergedGuest: false });
+      expectRemote(false);
     }
   });
 }

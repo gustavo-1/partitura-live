@@ -14,6 +14,31 @@ export function registerTempSong(song: Song) {
   }
 }
 
+/** Busca fora do aparelho (biblioteca compartilhada), registrada quando há login. */
+let remote: ((id: string) => Promise<Song | undefined>) | null = null;
+let remoteExpected = false;
+let remoteWaiters: (() => void)[] = [];
+function flushRemoteWaiters() {
+  remoteWaiters.forEach((fn) => fn());
+  remoteWaiters = [];
+}
+export function setRemoteResolver(fn: ((id: string) => Promise<Song | undefined>) | null) {
+  remote = fn;
+  if (fn) flushRemoteWaiters();
+}
+/** A conta está entrando: quem abrir um link direto espera a biblioteca compartilhada ficar pronta. */
+export function expectRemote(v: boolean) {
+  remoteExpected = v;
+  if (!v) flushRemoteWaiters();
+}
+function waitRemote(ms = 10000): Promise<void> {
+  if (remote || !remoteExpected) return Promise.resolve();
+  return new Promise((res) => {
+    remoteWaiters.push(res);
+    setTimeout(res, ms);
+  });
+}
+
 export async function getSong(id: string): Promise<Song | undefined> {
   const b = builtinSong(id);
   if (b) return b;
@@ -30,10 +55,12 @@ export async function getSong(id: string): Promise<Song | undefined> {
   }
   try {
     const rec = await idb.get<{ id: string; song: Song }>('songs', id);
-    return rec?.song;
+    if (rec?.song) return rec.song;
   } catch {
-    return undefined;
+    /* sem IndexedDB: tenta a biblioteca compartilhada */
   }
+  await waitRemote();
+  return remote ? remote(id) : undefined;
 }
 
 export interface ImportedRecord {

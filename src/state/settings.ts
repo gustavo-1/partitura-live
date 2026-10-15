@@ -22,6 +22,8 @@ export interface Settings {
   onboarded: boolean;
   /** emoji escolhido como avatar (aparece para os amigos) */
   avatar: string;
+  /** músicas importadas vão para a biblioteca de todos */
+  shareImports: boolean;
 }
 
 export const defaultSettings: Settings = {
@@ -40,6 +42,7 @@ export const defaultSettings: Settings = {
   computerKeyboard: true,
   onboarded: false,
   avatar: '',
+  shareImports: true,
 };
 
 export const settings = createStore<Settings>('pl.settings', defaultSettings);

@@ -15,6 +15,7 @@ import { settings } from '../state/settings';
 import { allLessons } from '../data/curriculum';
 import { builtinSong } from '../data/songs';
 import type { Song } from '../music/types';
+import { deleteMyCommunitySongs, setCommunityName, startCommunity, stopCommunity } from './community';
 import { deleteAllChats, sendChatCheer, sendChatChallenge, sendChatSong, sendChatText, startChats, stopChats } from './chat';
 
 export interface PublicProfile {
@@ -127,6 +128,7 @@ export function startSocial(f: FB, user: { uid: string; name: string; photo?: st
   pendingIdentity = null;
   social.replace({ ...initial, uid: user.uid });
   startChats(f, user.uid);
+  startCommunity(f, { uid: user.uid, name: me.name });
   void (async () => {
     try {
       await ensureProfile();
@@ -148,6 +150,7 @@ export function stopSocial() {
   fb = null;
   me = null;
   stopChats();
+  stopCommunity();
   social.replace({ ...initial });
 }
 
@@ -250,6 +253,7 @@ export function setSocialIdentity(name: string, photo?: string) {
     return;
   }
   me = { ...me, name, photo };
+  setCommunityName(name);
   publishProfileSoon(true);
 }
 
@@ -416,6 +420,7 @@ export async function deleteSocialData(f: FB, uid: string) {
   const inbox = await fs.getDocs(fs.collection(db, 'users', uid, 'inbox')).catch(() => null);
   inbox?.docs.forEach((d) => tasks.push(fs.deleteDoc(d.ref)));
   tasks.push(deleteAllChats(f, uid));
+  tasks.push(deleteMyCommunitySongs(f, uid));
   await Promise.all(tasks);
   if (code) await fs.deleteDoc(fs.doc(db, 'friendCodes', code)).catch(() => undefined);
   await fs.deleteDoc(fs.doc(db, 'profiles', uid)).catch(() => undefined);

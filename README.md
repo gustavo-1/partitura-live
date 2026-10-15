@@ -120,6 +120,8 @@ users/{uid}/inbox/{id}      caixa de mensagens antiga (só leitura; aparece dent
 chats/{a_b}                 conversa entre dois amigos: última mensagem, contadores, visto, digitando, presença
 chats/{a_b}/messages/{id}   mensagens (texto, aplauso, desafio, resultado, música) — só os dois leem;
                             só amigos enviam, assinadas por quem envia, com hora do servidor
+library/{id}                biblioteca compartilhada: resumo da música (todos com conta leem; só quem enviou altera/remove)
+libraryData/{id}            partitura compactada da música compartilhada (baixada só quando alguém abre)
 profiles/{uid}              resumo público (usuário logado lê um por vez; ninguém lista)
 friendCodes/{CODIGO}        código de amigo → uid (consulta exata; ninguém lista)
 friendRequests/{de_para}    pedidos de amizade
@@ -143,17 +145,18 @@ Projeto `partitura-live-2jo`, já com app web registrado (configuração públic
 
 ## Músicas
 
-O app traz 26 músicas prontas, em três coleções:
+O app traz 26 músicas prontas e uma biblioteca compartilhada:
 
 - **🎧 Pop e cinema** — peças **originais** do Partitura Live no clima de musicais de cinema (*Valsa das Luzes da Cidade*), do pop intimista (*Sussurro*), dos desenhos de aventura (*Verão Sem Fim*) e das baladas pop ao piano (*Carta Não Enviada*).
 - **🎻 Clássicos famosos** — Para Elisa, Cânone em Ré, Prelúdio em Dó (Bach), Gymnopédie nº 1, Manhã (Grieg), Na Gruta do Rei da Montanha, Greensleeves, Amazing Grace, Minueto em Sol, Ode à Alegria.
 - **🧸 Infantis e folclóricas** — para os primeiros passos.
 
-Músicas atuais (La La Land, Billie Eilish, Olivia Rodrigo, temas de séries…) têm direitos autorais e por isso não vêm embutidas num app público. A biblioteca tem atalhos de busca para elas: baixe um arranjo em MusicXML ou MIDI e importe — ele fica só na sua conta, com plano de estudo, modo espera e cascata.
+- **🌐 Da comunidade** — toda música que alguém importa (MusicXML ou MIDI) entra na biblioteca de todos que usam o app com conta, com o nome de quem adicionou. Quem adicionou pode tirá-la de lá a qualquer momento; o compartilhamento automático pode ser desligado na tela de Músicas.
 
 ## Onde achar partituras
 
-- **MuseScore** (musescore.com / MuseScore Studio, gratuito): abra a partitura e use *Exportar → MusicXML*.
+- **Arquivos MIDI** (.mid) de qualquer música: o app converte em partitura (prefira MIDIs de piano com poucas notas).
+- **MuseScore Studio** (programa gratuito para computador): digite ou edite uma partitura e use *Exportar → MusicXML*.
 - **IMSLP** e **Mutopia Project**: domínio público, muitas com MIDI/MusicXML.
 - **OpenScore**: partituras clássicas digitadas, licença livre.
 - Prefira arranjos "piano fácil" / "beginner" no começo.

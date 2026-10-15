@@ -4,38 +4,47 @@ import { deleteImported, listImported, onLibraryChange, saveImported, type Impor
 import type { Song } from '../music/types';
 import { useStore } from '../lib/store';
 import { progress } from '../state/progress';
+import { settings } from '../state/settings';
+import { account } from '../lib/account';
+import { community, shareSong, unshareSong, type CommunitySong, type ShareResult } from '../lib/community';
 import { navigate } from '../lib/router';
 import { Icon, LevelDots } from '../components/Icon';
-import { Seg } from '../components/ui';
+import { Seg, Toggle } from '../components/ui';
 import { handsInSong } from '../music/timeline';
 
 type Filter = 'all' | '1' | '2' | '3' | '4';
-type Coll = 'all' | SongCollection;
+type Coll = 'all' | 'comunidade' | SongCollection;
 
 const COLLECTIONS: { value: Coll; label: string }[] = [
   { value: 'all', label: 'Todas' },
+  { value: 'comunidade', label: '🌐 Da comunidade' },
   { value: 'pop', label: '🎧 Pop e cinema' },
   { value: 'classico', label: '🎻 Clássicos famosos' },
   { value: 'folclore', label: '🧸 Infantis e folclóricas' },
 ];
 
-/** Buscas prontas para quem quer tocar músicas atuais (com direitos autorais: a pessoa importa o arranjo). */
-const FAVORITES: { artist: string; songs: string[] }[] = [
-  { artist: 'La La Land', songs: ['City of Stars', "Mia and Sebastian's Theme", 'Another Day of Sun'] },
-  { artist: 'Billie Eilish', songs: ['lovely', 'What Was I Made For', 'ocean eyes'] },
-  { artist: 'Phineas e Ferb', songs: ['Phineas and Ferb theme', 'Gitchee Gitchee Goo'] },
-  { artist: 'Olivia Rodrigo', songs: ['drivers license', 'traitor', 'vampire'] },
-];
-const searchUrl = (q: string) => `https://musescore.com/sheetmusic?text=${encodeURIComponent(q + ' easy piano')}`;
+const SHARE_MSG: Record<ShareResult, string> = {
+  ok: 'agora está disponível para todos na seção “Da comunidade”.',
+  already: 'já estava na biblioteca da comunidade.',
+  'too-big': 'é grande demais para compartilhar (limite de ~900 KB compactado).',
+  'signed-out': 'ficou só neste aparelho (entre na conta para compartilhar).',
+  error: 'não pôde ser compartilhada agora (sem conexão?). Tente pelo botão “Compartilhar” abaixo.',
+};
 
 export function Library() {
   const p = useStore(progress);
+  const st = useStore(settings);
+  const acc = useStore(account);
+  const com = useStore(community);
+  const signedIn = acc.status === 'signed-in';
+  const myUid = acc.user?.uid;
   const [imported, setImported] = useState<ImportedRecord[]>([]);
   const [filter, setFilter] = useState<Filter>('all');
   const [coll, setColl] = useState<Coll>('all');
   const [query, setQuery] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [drag, setDrag] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -49,6 +58,8 @@ export function Library() {
     if (!files?.length) return;
     setBusy(true);
     setError(null);
+    setNotice(null);
+    const notes: string[] = [];
     try {
       let last: Song | null = null;
       for (const f of Array.from(files)) {
@@ -65,8 +76,10 @@ export function Library() {
         }
         if (!song.notes.some((n) => n.keys.length)) throw new Error(`${f.name}: nenhuma nota encontrada.`);
         await saveImported(song, f.name);
+        if (signedIn && settings.get().shareImports) notes.push(`“${song.title}” ${SHARE_MSG[await shareSong(song, f.name)]}`);
         last = song;
       }
+      if (notes.length) setNotice(notes.join(' '));
       if (last && files.length === 1) navigate(`/musica/${encodeURIComponent(last.id)}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -76,14 +89,15 @@ export function Library() {
   };
 
   const q = query.trim().toLowerCase();
-  const songs = builtinSongs().filter(
-    (s) =>
-      (filter === 'all' || String(Math.min(4, s.level)) === filter) &&
-      (coll === 'all' || songCollection(s.id) === coll) &&
-      (!q || s.title.toLowerCase().includes(q) || (s.composer ?? '').toLowerCase().includes(q)),
-  );
-  // quem procura uma música pop que não vem no app vê como importá-la
-  const lookingForPop = !!q && songs.length === 0;
+  const levelOk = (lv: number) => filter === 'all' || String(Math.min(4, lv)) === filter;
+  const textOk = (...xs: (string | undefined)[]) => !q || xs.some((x) => (x ?? '').toLowerCase().includes(q));
+  const songs =
+    coll === 'comunidade'
+      ? []
+      : builtinSongs().filter((s) => levelOk(s.level) && (coll === 'all' || songCollection(s.id) === coll) && textOk(s.title, s.composer));
+  const showCommunity = coll === 'all' || coll === 'comunidade';
+  const shared = com.songs.filter((s) => levelOk(s.level) && textOk(s.title, s.composer, s.ownerName));
+  const sharedIds = new Set(com.songs.map((s) => s.id));
 
   return (
     <div>
@@ -92,13 +106,14 @@ export function Library() {
       </div>
       <p className="muted">
         Escolha uma música para aprender. Cada uma tem um <b>plano de estudo</b> que divide a peça em trechos e guia você das mãos separadas até
-        o andamento original.
+        o andamento original. As músicas que alguém importa ficam disponíveis para todos na seção <b>Da comunidade</b>.
       </p>
 
       <div className="chip-choices" role="radiogroup" aria-label="Coleção" style={{ marginTop: 14 }}>
         {COLLECTIONS.map((c) => (
           <button key={c.value} role="radio" aria-checked={coll === c.value} className={'chip-btn' + (coll === c.value ? ' on' : '')} onClick={() => setColl(c.value)}>
             {c.label}
+            {c.value === 'comunidade' && com.songs.length > 0 ? ` (${com.songs.length})` : ''}
           </button>
         ))}
       </div>
@@ -118,51 +133,57 @@ export function Library() {
         />
       </div>
 
-      {songs.length === 0 && <p className="small muted">Nenhuma música embutida com esse filtro.</p>}
-      <div className="grid cols-2">
-        {songs.map((s) => (
-          <SongCard key={s.id} song={s} best={p.songs[s.id]?.best} />
-        ))}
-      </div>
-
-      {(coll === 'pop' || coll === 'all' || lookingForPop) && (
-        <div className="card favorites-card">
-          <h3 style={{ marginTop: 0 }}>🎬 Quer tocar La La Land, Billie Eilish, Olivia Rodrigo…?</h3>
-          <p className="small muted">
-            Músicas atuais de artistas, filmes e séries têm direitos autorais, por isso não vêm no app. Mas você pode tocá-las aqui: baixe um
-            arranjo em <b>MusicXML</b> ou <b>MIDI</b> (no MuseScore, por exemplo — procure “easy piano”) e importe. Ele ganha plano de estudo, modo
-            espera, cascata e fica salvo só na sua conta.
-          </p>
-          {lookingForPop && (
-            <a className="btn sm primary" href={searchUrl(query.trim())} target="_blank" rel="noopener noreferrer" style={{ marginBottom: 10 }}>
-              Procurar “{query.trim()}” no MuseScore ↗
-            </a>
-          )}
-          <div className="fav-groups">
-            {FAVORITES.map((g) => (
-              <div key={g.artist} className="fav-group">
-                <b className="small">{g.artist}</b>
-                <div className="chip-choices">
-                  {g.songs.map((t) => (
-                    <a key={t} className="chip-btn" href={searchUrl(t)} target="_blank" rel="noopener noreferrer">
-                      {t} ↗
-                    </a>
-                  ))}
-                </div>
-              </div>
+      {coll !== 'comunidade' && (
+        <>
+          {songs.length === 0 && <p className="small muted">Nenhuma música do app com esse filtro.</p>}
+          <div className="grid cols-2">
+            {songs.map((s) => (
+              <SongCard key={s.id} song={s} best={p.songs[s.id]?.best} />
             ))}
           </div>
-          <div className="row" style={{ marginTop: 12 }}>
-            <button className="btn primary sm" onClick={() => fileRef.current?.click()}>
-              <Icon name="upload" /> Importar arquivo baixado
-            </button>
-            <span className="tiny muted">Enquanto isso, experimente as peças originais “no clima” do pop e do cinema acima.</span>
+        </>
+      )}
+
+      {showCommunity && (
+        <>
+          <div className="section-title">
+            <h2>🌐 Da comunidade</h2>
+            {signedIn && com.ready && <span className="small muted">{com.songs.length} músicas</span>}
           </div>
-        </div>
+          {!signedIn ? (
+            <div className="banner small">
+              <Icon name="users" size={18} />
+              <div style={{ flex: 1 }}>Entre na sua conta para ver e tocar as músicas que as pessoas adicionaram ao app.</div>
+              <a className="btn sm primary" href="#/perfil">
+                Entrar
+              </a>
+            </div>
+          ) : !com.ready ? (
+            <p className="small muted">Carregando…</p>
+          ) : com.songs.length === 0 ? (
+            <p className="small muted">Ainda não há músicas aqui. Importe uma partitura abaixo e ela aparece para todos.</p>
+          ) : shared.length === 0 ? (
+            <p className="small muted">Nenhuma música da comunidade com esse filtro.</p>
+          ) : (
+            <div className="grid cols-2">
+              {shared.map((s) => (
+                <CommunityCard
+                  key={s.id}
+                  s={s}
+                  best={p.songs[s.id]?.best}
+                  mine={s.ownerUid === myUid}
+                  onRemove={() => {
+                    if (confirm(`Tirar “${s.title}” da biblioteca de todos? Ela continua nas suas músicas importadas.`)) void unshareSong(s.id).catch((e) => setError(String(e)));
+                  }}
+                />
+              ))}
+            </div>
+          )}
+        </>
       )}
 
       <div className="section-title">
-        <h2>Suas músicas</h2>
+        <h2>Adicionar uma música</h2>
       </div>
       <div
         className={'dropzone' + (drag ? ' drag' : '')}
@@ -195,6 +216,21 @@ export function Library() {
           onChange={(e) => void onFiles(e.target.files)}
         />
       </div>
+      {signedIn && (
+        <div style={{ marginTop: 6 }}>
+          <Toggle
+            label="Compartilhar com todos"
+            hint="As músicas que você importar entram na seção “Da comunidade”, com o seu nome. Você pode tirar qualquer uma depois."
+            checked={st.shareImports}
+            onChange={(v) => settings.set({ shareImports: v })}
+          />
+        </div>
+      )}
+      {notice && (
+        <div className="banner small" style={{ marginTop: 10 }}>
+          <Icon name="users" size={18} /> <div>{notice}</div>
+        </div>
+      )}
       {error && (
         <div className="banner bad small" style={{ marginTop: 10 }}>
           <Icon name="info" size={18} /> <div>{error}</div>
@@ -202,43 +238,118 @@ export function Library() {
       )}
       <details style={{ margin: '12px 0' }}>
         <summary className="small" style={{ cursor: 'pointer', fontWeight: 650 }}>
-          Onde encontrar partituras gratuitas?
+          Onde conseguir arquivos de partitura?
         </summary>
         <ul className="small muted">
           <li>
-            <b>MuseScore</b> (musescore.com / MuseScore Studio, gratuito): abra qualquer partitura e use <i>Exportar → MusicXML</i>.
+            <b>Arquivos MIDI</b> (.mid) de qualquer música funcionam: o app converte em partitura. Prefira MIDIs de piano com poucas notas.
           </li>
           <li>
-            <b>IMSLP</b> e <b>Mutopia Project</b>: obras de domínio público, muitas com arquivos MIDI ou MusicXML.
+            <b>IMSLP</b>, <b>Mutopia Project</b> e <b>OpenScore</b>: obras de domínio público, gratuitas, muitas com MIDI ou MusicXML.
           </li>
           <li>
-            <b>OpenScore</b>: partituras clássicas digitadas em MusicXML, licença livre.
+            <b>MuseScore Studio</b> (programa gratuito para computador): digite ou edite uma partitura e use <i>Exportar → MusicXML</i>.
           </li>
-          <li>Prefira arranjos "para piano fácil" ou "beginner" para começar.</li>
         </ul>
       </details>
-      {imported.length === 0 ? (
-        <p className="small muted">Nenhuma música importada ainda.</p>
-      ) : (
-        <div className="grid cols-2">
-          {imported.map((r) => (
-            <div key={r.id} style={{ position: 'relative' }}>
-              <SongCard song={r.song} best={p.songs[r.id]?.best} />
-              <button
-                className="btn ghost icon danger"
-                style={{ position: 'absolute', top: 8, right: 8 }}
-                aria-label="Remover música"
-                onClick={async () => {
-                  if (!confirm(`Remover "${r.song.title}"?`)) return;
+
+      {imported.length > 0 && (
+        <>
+          <div className="section-title">
+            <h2>Suas músicas importadas</h2>
+          </div>
+          <div className="grid cols-2">
+            {imported.map((r) => (
+              <ImportedItem
+                key={r.id}
+                r={r}
+                best={p.songs[r.id]?.best}
+                shared={sharedIds.has(r.id)}
+                canShare={signedIn && com.ready}
+                onShare={async () => setNotice(`“${r.song.title}” ${SHARE_MSG[await shareSong(r.song, r.fileName)]}`)}
+                onDelete={async () => {
+                  if (!confirm(`Remover "${r.song.title}" das suas músicas?${sharedIds.has(r.id) ? ' (Ela continua na biblioteca da comunidade até você tirá-la de lá.)' : ''}`)) return;
                   await deleteImported(r.id);
                 }}
-              >
-                <Icon name="trash" />
-              </button>
-            </div>
-          ))}
-        </div>
+              />
+            ))}
+          </div>
+        </>
       )}
+    </div>
+  );
+}
+
+const HANDS_LABEL: Record<CommunitySong['hands'], string> = { RL: 'Duas mãos', R: 'Mão direita', L: 'Mão esquerda' };
+
+function CommunityCard({ s, best, mine, onRemove }: { s: CommunitySong; best?: number; mine: boolean; onRemove: () => void }) {
+  return (
+    <div className="lib-item">
+      <button className="card song-card" onClick={() => navigate(`/musica/${encodeURIComponent(s.id)}`)}>
+        <div className="row between nowrap">
+          <LevelDots level={s.level} />
+          {best !== undefined && <span className={'chip ' + (best >= 0.9 ? 'ok' : '')}>{Math.round(best * 100)}%</span>}
+        </div>
+        <h3>{s.title}</h3>
+        {s.composer && <div className="small muted">{s.composer}</div>}
+        <div className="small">
+          Adicionada por <b>{mine ? 'você' : s.ownerName}</b>
+        </div>
+        <div className="row" style={{ gap: 6 }}>
+          <span className="chip">{HANDS_LABEL[s.hands]}</span>
+          <span className="chip">{s.measures} compassos</span>
+        </div>
+      </button>
+      {mine && (
+        <button className="btn ghost icon danger lib-action" aria-label="Tirar da biblioteca de todos" title="Tirar da biblioteca de todos" onClick={onRemove}>
+          <Icon name="trash" />
+        </button>
+      )}
+    </div>
+  );
+}
+
+function ImportedItem({
+  r,
+  best,
+  shared,
+  canShare,
+  onShare,
+  onDelete,
+}: {
+  r: ImportedRecord;
+  best?: number;
+  shared: boolean;
+  canShare: boolean;
+  onShare: () => Promise<void>;
+  onDelete: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <div className="lib-item">
+      <SongCard song={r.song} best={best} />
+      <button className="btn ghost icon danger lib-action" aria-label="Remover música" onClick={onDelete}>
+        <Icon name="trash" />
+      </button>
+      <div className="lib-status small">
+        {shared ? (
+          <span className="chip ok">🌐 Disponível para todos</span>
+        ) : canShare ? (
+          <button
+            className="btn sm"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              await onShare();
+              setBusy(false);
+            }}
+          >
+            <Icon name="users" /> {busy ? 'Compartilhando…' : 'Compartilhar com todos'}
+          </button>
+        ) : (
+          <span className="muted tiny">Só neste aparelho/conta</span>
+        )}
+      </div>
     </div>
   );
 }

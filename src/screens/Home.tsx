@@ -9,7 +9,7 @@ import { Icon } from '../components/Icon';
 import { ProgressBar } from '../components/ui';
 import { nextLessonId } from './PathScreen';
 import { SongCard } from './Library';
-import { listImported } from '../data/library';
+import { getSong } from '../data/library';
 import type { Song } from '../music/types';
 import { account } from '../lib/account';
 import { friendFeed, profileWeek, social } from '../lib/social';
@@ -76,10 +76,12 @@ export function Home() {
       .sort((a, b) => b[1].lastPlayed - a[1].lastPlayed)
       .slice(0, 4)
       .map(([id]) => id);
-    listImported().then((imp) => {
-      const all = [...builtinSongs(), ...imp.map((r) => r.song)];
-      setRecent(ids.map((id) => all.find((s) => s.id === id)).filter((s): s is Song => !!s));
-    });
+    // inclui músicas importadas e da comunidade
+    let alive = true;
+    void Promise.all(ids.map((id) => getSong(id))).then((list) => alive && setRecent(list.filter((s): s is Song => !!s)));
+    return () => {
+      alive = false;
+    };
   }, [p.songs]);
 
   // sugestões: as mais fáceis ainda não tocadas, com pelo menos uma de cada coleção

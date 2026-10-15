@@ -10,6 +10,8 @@ rules_version = '2';
 //  friendships/{a_b}      amizade (uids em ordem alfabética)
 //  chats/{a_b}            conversa entre dois amigos (resumo, leitura, digitando)
 //  chats/{a_b}/messages   mensagens da conversa
+//  library/{id}           biblioteca compartilhada: resumo da música (todos com conta leem; só quem enviou altera)
+//  libraryData/{id}       partitura compactada da música compartilhada
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -163,6 +165,38 @@ service cloud.firestore {
         // qualquer um dos dois pode apagar (apagar a conversa vale para os dois)
         allow delete: if isMember();
       }
+    }
+      // ---------- biblioteca compartilhada ----------
+    match /library/{songId} {
+      function validMeta() {
+        let d = request.resource.data;
+        return d.keys().hasOnly(['title', 'composer', 'level', 'hands', 'measures', 'fileName', 'ownerUid', 'ownerName', 'createdAt'])
+          && d.ownerUid == me()
+          && shortString(d.title, 160)
+          && optShortString(d, 'composer', 160)
+          && optShortString(d, 'fileName', 200)
+          && shortString(d.ownerName, 60)
+          && d.level is int && d.level >= 1 && d.level <= 5
+          && d.hands in ['R', 'L', 'RL']
+          && d.measures is int;
+      }
+      allow read: if signedIn();
+      allow create: if signedIn() && songId.size() <= 200 && validMeta();
+      allow update: if signedIn() && resource.data.ownerUid == me() && validMeta();
+      allow delete: if signedIn() && resource.data.ownerUid == me();
+    }
+    match /libraryData/{songId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && songId.size() <= 200
+        && request.resource.data.keys().hasOnly(['ownerUid', 'data', 'createdAt'])
+        && request.resource.data.ownerUid == me()
+        && request.resource.data.data is bytes
+        && request.resource.data.data.size() <= 950000;
+      allow update: if signedIn() && resource.data.ownerUid == me()
+        && request.resource.data.keys().hasOnly(['ownerUid', 'data', 'createdAt'])
+        && request.resource.data.ownerUid == me()
+        && request.resource.data.data is bytes;
+      allow delete: if signedIn() && resource.data.ownerUid == me();
     }
   }
 }

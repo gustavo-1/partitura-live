@@ -166,4 +166,46 @@ describe.skipIf(!HOST)('regras do Firestore', () => {
     await assertSucceeds(db('bob').doc(m0).delete());
     await assertSucceeds(db('alice').doc('chats/alice_bob').delete());
   });
+  it('biblioteca compartilhada: todos com conta leem; só quem enviou altera ou remove', async () => {
+    const FV = firebase.firestore.FieldValue;
+    void FV;
+    const bytes = firebase.firestore.Blob.fromUint8Array(new Uint8Array([31, 139, 8, 0, 1, 2, 3]));
+    const meta = (owner: string, extra: Record<string, unknown> = {}) => ({
+      title: 'Minha música',
+      composer: null,
+      level: 2,
+      hands: 'RL',
+      measures: 16,
+      fileName: 'musica.mid',
+      ownerUid: owner,
+      ownerName: 'Alice',
+      createdAt: Date.now(),
+      ...extra,
+    });
+    const publish = (who: string, owner = who, extra: Record<string, unknown> = {}) => {
+      const d = db(who);
+      const b = d.batch();
+      b.set(d.doc('libraryData/imp-1'), { ownerUid: owner, data: bytes, createdAt: 1 });
+      b.set(d.doc('library/imp-1'), meta(owner, extra));
+      return b.commit();
+    };
+    await assertFails(publish('alice', 'bob')); // em nome de outra pessoa
+    await assertFails(publish('alice', 'alice', { admin: true }));
+    await assertFails(publish('alice', 'alice', { level: 99 }));
+    await assertFails(db(null).doc('library/imp-1').set(meta('alice')));
+    await assertSucceeds(publish('alice'));
+    // qualquer pessoa com conta lista e baixa
+    await assertSucceeds(db('carol').collection('library').orderBy('createdAt', 'desc').get());
+    await assertSucceeds(db('carol').doc('libraryData/imp-1').get());
+    await assertFails(db(null).collection('library').get());
+    await assertFails(db(null).doc('libraryData/imp-1').get());
+    // outra pessoa não sobrescreve, não altera e não remove
+    await assertFails(publish('bob'));
+    await assertFails(db('bob').doc('library/imp-1').update({ title: 'Roubada' }));
+    await assertFails(db('bob').doc('libraryData/imp-1').delete());
+    await assertFails(db('bob').doc('library/imp-1').delete());
+    // quem enviou remove
+    await assertSucceeds(db('alice').doc('library/imp-1').delete());
+    await assertSucceeds(db('alice').doc('libraryData/imp-1').delete());
+  });
 });
