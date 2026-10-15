@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { getSong } from '../data/library';
+import { lazy, Suspense, useEffect, useState } from 'react';
+import { getSong, listImported, saveImported } from '../data/library';
 import { IMPORT_VERSION, type Song } from '../music/types';
 import { studyPlan, stepUrl } from '../practice/plan';
 import { useStore } from '../lib/store';
@@ -9,7 +9,13 @@ import { Score } from '../components/score/Score';
 import { Icon, LevelDots } from '../components/Icon';
 import { ProgressBar } from '../components/ui';
 import { back, navigate } from '../lib/router';
-import { handsInSong } from '../music/timeline';
+import { handsInSong, tempoRange } from '../music/timeline';
+import { CompareButtons, FidelityLine } from '../components/Fidelity';
+import { b64ToBuffer } from '../lib/b64';
+import { updateSharedSong } from '../lib/community';
+import type { TrackChoice } from '../music/midiImport';
+
+const TrackPicker = lazy(() => import('../components/TrackPicker'));
 import { keySigName } from '../music/theory';
 import { account } from '../lib/account';
 import { sendChallenge, sendSong, social } from '../lib/social';
@@ -24,10 +30,10 @@ export default function SongDetail({ id }: { id: string }) {
   }, [id]);
   if (song === undefined) return <div className="empty">Carregando…</div>;
   if (!song) return <div className="empty">Música não encontrada.</div>;
-  return <SongDetailInner song={song} />;
+  return <SongDetailInner song={song} onReplace={setSong} />;
 }
 
-function SongDetailInner({ song }: { song: Song }) {
+function SongDetailInner({ song, onReplace }: { song: Song; onReplace: (s: Song) => void }) {
   const acc = useStore(account);
   const soc = useStore(social);
   const [picker, setPicker] = useState<null | 'challenge' | 'send'>(null);
@@ -44,6 +50,30 @@ function SongDetailInner({ song }: { song: Song }) {
   const nextIdx = plan.steps.findIndex((s) => !doneKeys.has(s.key));
   const hands = handsInSong(song);
   const pct = doneKeys.size / plan.steps.length;
+  const [tLo, tHi] = tempoRange(song);
+  // músicas importadas por você (no aparelho/conta) podem ser reconvertidas a partir do arquivo original
+  const [mine, setMine] = useState<{ fileName: string } | null>(null);
+  const [retrack, setRetrack] = useState(false);
+  const [convNotice, setConvNotice] = useState<string | null>(null);
+  useEffect(() => {
+    if (song.source !== 'import') return;
+    listImported().then((rs) => {
+      const r = rs.find((x) => x.id === song.id);
+      setMine(r ? { fileName: r.fileName } : null);
+    });
+  }, [song.id, song.source]);
+  const reconvert = async (tracks: TrackChoice[]) => {
+    setRetrack(false);
+    const o = song.original!;
+    const { importMidi } = await import('../music/midiImport');
+    const fresh = importMidi(b64ToBuffer(o.data), o.name, { tracks });
+    // mesma música (mesmo id): o progresso e os links continuam valendo
+    const next: Song = { ...fresh, id: song.id, title: song.title };
+    await saveImported(next, mine?.fileName ?? o.name);
+    const shared = await updateSharedSong(next, mine?.fileName ?? o.name);
+    setConvNotice(shared ? 'Partitura refeita (também na biblioteca da comunidade).' : 'Partitura refeita.');
+    onReplace(next);
+  };
 
   return (
     <div>
@@ -57,12 +87,13 @@ function SongDetailInner({ song }: { song: Song }) {
         </div>
       </div>
 
-      {song.source === 'import' && (song.importVersion ?? 1) < IMPORT_VERSION && (
+      {song.source === 'import' && mine && (song.importVersion ?? 1) < IMPORT_VERSION && (
         <div className="banner warn small" style={{ marginBottom: 14 }}>
           <Icon name="info" size={18} />
           <div>
-            Esta música foi importada antes da melhoria de conversão (notas longas, tercinas, pedal e intensidade). Para ouvi-la fiel ao
-            arquivo, remova-a em <b>Músicas → Suas músicas importadas</b> e importe o arquivo de novo.
+            Esta música foi importada com uma versão anterior do conversor. Importe o mesmo arquivo de novo em <b>Músicas</b> para ganhar a
+            escolha de trilhas (sem instrumentos se atropelando no piano), as mudanças de andamento e de compasso do arquivo e a duração real
+            de cada nota — a versão antiga é substituída e o seu progresso continua.
           </div>
         </div>
       )}
@@ -75,7 +106,7 @@ function SongDetailInner({ song }: { song: Song }) {
             {song.timeSig[0]}/{song.timeSig[1]}
           </span>
           <span className="chip">{keySigName(song.keySig, st.naming)}</span>
-          <span className="chip">{song.tempo} bpm</span>
+          <span className="chip">{Math.round(tHi) - Math.round(tLo) >= 1 ? `${Math.round(tLo)}–${Math.round(tHi)} bpm` : `${Math.round(song.tempo)} bpm`}</span>
           <span className="chip">{song.measures.length} compassos</span>
         </div>
         {song.description && <p className="muted">{song.description}</p>}
@@ -97,6 +128,48 @@ function SongDetailInner({ song }: { song: Song }) {
           </p>
         )}
       </div>
+
+      {song.source === 'import' && (
+        <>
+          <div className="section-title">
+            <h2>Conversão do arquivo</h2>
+          </div>
+          <div className="card stack" style={{ gap: 10 }}>
+            {song.importReport ? (
+              <FidelityLine report={song.importReport} />
+            ) : (
+              <p className="small muted" style={{ margin: 0 }}>
+                Sem relatório de conversão (importada com uma versão anterior ou a partir de MusicXML).
+              </p>
+            )}
+            <p className="small muted" style={{ margin: 0 }}>
+              Compare: {song.original?.kind === 'midi' ? 'o arquivo original tocado nota por nota e ' : ''}a partitura como o app toca, ambos no
+              andamento original e com o mesmo piano.
+            </p>
+            <CompareButtons song={song} />
+            {mine && song.original?.kind === 'midi' && (
+              <div>
+                <button className="btn sm ghost" onClick={() => setRetrack(true)}>
+                  <Icon name="sliders" /> Trilhas e mãos…
+                </button>
+              </div>
+            )}
+            {convNotice && <p className="small" style={{ color: 'var(--ok)', margin: 0 }}>{convNotice}</p>}
+          </div>
+          {retrack && song.original && (
+            <Suspense fallback={null}>
+              <TrackPicker
+                fileName={song.original.name}
+                data={b64ToBuffer(song.original.data)}
+                initial={song.original.tracks}
+                confirmLabel="Refazer partitura"
+                onCancel={() => setRetrack(false)}
+                onConfirm={(t) => void reconvert(t)}
+              />
+            </Suspense>
+          )}
+        </>
+      )}
 
       <div className="section-title">
         <h2>Plano de estudo</h2>

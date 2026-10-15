@@ -1,16 +1,18 @@
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { builtinSongs, songCollection, type SongCollection } from '../data/songs';
 import { deleteImported, listImported, onLibraryChange, saveImported, type ImportedRecord } from '../data/library';
-import type { Song } from '../music/types';
+import { IMPORT_VERSION, type Song } from '../music/types';
 import { useStore } from '../lib/store';
 import { progress } from '../state/progress';
 import { settings } from '../state/settings';
 import { account } from '../lib/account';
-import { community, shareSong, unshareSong, type CommunitySong, type ShareResult } from '../lib/community';
+import { community, shareSong, unshareSong, updateSharedSong, type CommunitySong, type ShareResult } from '../lib/community';
 import { navigate } from '../lib/router';
 import { Icon, LevelDots } from '../components/Icon';
 import { Seg, Toggle } from '../components/ui';
 import { handsInSong } from '../music/timeline';
+
+const TrackPicker = lazy(() => import('../components/TrackPicker'));
 
 type Filter = 'all' | '1' | '2' | '3' | '4';
 type Coll = 'all' | 'comunidade' | SongCollection;
@@ -46,7 +48,13 @@ export function Library() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [drag, setDrag] = useState(false);
+  /** MIDI com vários instrumentos esperando a escolha de trilhas */
+  const [picking, setPicking] = useState<{ name: string; data: ArrayBuffer; resolve: (t: import('../music/midiImport').TrackChoice[] | null) => void } | null>(
+    null,
+  );
   const fileRef = useRef<HTMLInputElement>(null);
+  const askTracks = (name: string, data: ArrayBuffer) =>
+    new Promise<import('../music/midiImport').TrackChoice[] | null>((resolve) => setPicking({ name, data, resolve }));
 
   const refresh = () => listImported().then(setImported);
   useEffect(() => {
@@ -66,8 +74,22 @@ export function Library() {
         const buf = await f.arrayBuffer();
         let song: Song;
         if (/\.(mid|midi)$/i.test(f.name)) {
-          const { importMidi } = await import('../music/midiImport');
-          song = importMidi(buf, f.name);
+          const { importMidi, midiTracks, needsTrackChoice } = await import('../music/midiImport');
+          const { Midi } = await import('@tonejs/midi');
+          let infos;
+          try {
+            infos = midiTracks(new Midi(buf));
+          } catch {
+            throw new Error(`${f.name}: arquivo MIDI inválido ou corrompido.`);
+          }
+          // vários instrumentos: a pessoa escolhe o que vira partitura (e ouve antes)
+          let tracks: import('../music/midiImport').TrackChoice[] | undefined;
+          if (needsTrackChoice(infos)) {
+            const picked = await askTracks(f.name, buf);
+            if (!picked) continue;
+            tracks = picked;
+          }
+          song = importMidi(buf, f.name, { tracks });
         } else if (/\.(xml|musicxml|mxl)$/i.test(f.name)) {
           const { importMusicXml, musicXmlText } = await import('../music/musicxml');
           song = importMusicXml(musicXmlText(buf, f.name), f.name);
@@ -75,8 +97,17 @@ export function Library() {
           throw new Error(`Formato não suportado: ${f.name}. Use MusicXML (.musicxml, .xml, .mxl) ou MIDI (.mid).`);
         }
         if (!song.notes.some((n) => n.keys.length)) throw new Error(`${f.name}: nenhuma nota encontrada.`);
-        await saveImported(song, f.name);
-        if (signedIn && settings.get().shareImports) notes.push(`“${song.title}” ${SHARE_MSG[await shareSong(song, f.name)]}`);
+        // o mesmo arquivo importado com o conversor antigo: substitui (mesmo id, o progresso continua)
+        const prev = imported.find((r) => r.fileName === f.name && r.song.source === 'import' && (r.song.importVersion ?? 1) < IMPORT_VERSION);
+        if (prev) {
+          song = { ...song, id: prev.id, title: prev.song.title };
+          await saveImported(song, f.name);
+          const shared = await updateSharedSong(song, f.name);
+          notes.push(`“${song.title}” foi refeita com o conversor novo${shared ? ' (também na comunidade)' : ''} — seu progresso continua.`);
+        } else {
+          await saveImported(song, f.name);
+          if (signedIn && settings.get().shareImports) notes.push(`“${song.title}” ${SHARE_MSG[await shareSong(song, f.name)]}`);
+        }
         last = song;
       }
       if (notes.length) setNotice(notes.join(' '));
@@ -101,6 +132,22 @@ export function Library() {
 
   return (
     <div>
+      {picking && (
+        <Suspense fallback={null}>
+          <TrackPicker
+            fileName={picking.name}
+            data={picking.data}
+            onCancel={() => {
+              picking.resolve(null);
+              setPicking(null);
+            }}
+            onConfirm={(t) => {
+              picking.resolve(t);
+              setPicking(null);
+            }}
+          />
+        </Suspense>
+      )}
       <div className="page-header">
         <h1>Músicas</h1>
       </div>

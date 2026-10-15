@@ -10,6 +10,7 @@ node e2e/social.mjs        # Alice e Bob: contas, amizade, liga, feed, aplauso, 
 node e2e/chat.mjs          # Ana (celular) e Beto (computador): chat em tempo real, digitando, visto, reações, avisos, desafio pelo chat
 node e2e/community.mjs     # Eva importa uma partitura; Davi (sem ser amigo) vê, abre e pratica; Eva tira e compartilha de novo
 node e2e/cloud-songs.mjs   # visitante importa partitura, cria conta, música chega em outro aparelho e é enviada a uma amiga
+node e2e/import-midi.mjs   # MIDI com vários instrumentos: escolha de trilhas, fidelidade, original × convertida, refazer, bpm digitado
 ```
 
-Os scripts criam contas com e-mails novos a cada execução. `e2e/chat.mjs` termina com código 1 se alguma verificação falhar; defina `SHOTS=pasta` para salvar capturas de tela.
+Os scripts criam contas com e-mails novos a cada execução. `e2e/chat.mjs` e `e2e/import-midi.mjs` terminam com código 1 se alguma verificação falhar; defina `SHOTS=pasta` para salvar capturas de tela.

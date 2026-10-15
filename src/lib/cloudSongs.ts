@@ -15,13 +15,23 @@ export function packSong(song: Song): Uint8Array {
   return gzipSync(strToU8(JSON.stringify(song)), { level: 9 });
 }
 
+/** Compacta para a nuvem; se passar do limite, vai sem o arquivo original (a partitura é o essencial). */
+export function packForCloud(song: Song, max = MAX_BYTES): Uint8Array | null {
+  let bytes = packSong(song);
+  if (bytes.length > max && song.original) {
+    const { original: _drop, ...rest } = song;
+    bytes = packSong(rest as Song);
+  }
+  return bytes.length > max ? null : bytes;
+}
+
 export function unpackSong(data: Uint8Array): Song {
   return JSON.parse(strFromU8(gunzipSync(data))) as Song;
 }
 
 async function upload(fb: FB, uid: string, r: ImportedRecord): Promise<boolean> {
-  const bytes = packSong(r.song);
-  if (bytes.length > MAX_BYTES) return false;
+  const bytes = packForCloud(r.song);
+  if (!bytes) return false;
   await fb.fs.setDoc(fb.fs.doc(fb.db, 'users', uid, 'songs', r.id), {
     title: r.song.title.slice(0, 120),
     fileName: r.fileName.slice(0, 200),

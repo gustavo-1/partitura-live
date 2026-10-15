@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { getSong } from '../data/library';
 import type { Hand, Song } from '../music/types';
-import { handsInSong, songRange } from '../music/timeline';
+import { handsInSong, songRange, tempoRange } from '../music/timeline';
 import { PracticeEngine, type PassResult, type PracticeMode } from '../practice/engine';
 import { studyPlan, stepUrl, handsKey } from '../practice/plan';
 import { input } from '../audio/input';
@@ -63,6 +63,45 @@ export default function Player({ id, query }: { id: string; query: URLSearchPara
       </div>
     );
   return <PlayerInner key={id + query.toString()} song={song} query={query} />;
+}
+
+export const BPM_MIN = 20;
+export const BPM_MAX = 300;
+
+/** Campo de andamento: digite qualquer valor (Enter ou sair do campo aplica). */
+function BpmInput({ bpm, onSet, className = '' }: { bpm: number; onSet: (bpm: number) => void; className?: string }) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const commit = () => {
+    if (draft === null) return;
+    const v = Math.round(Number(draft.replace(',', '.')));
+    if (Number.isFinite(v) && v > 0) onSet(Math.max(BPM_MIN, Math.min(BPM_MAX, v)));
+    setDraft(null);
+  };
+  return (
+    <label className={'bpm-input ' + className} title="Andamento (toque para digitar)">
+      <Icon name="metronome" size={14} />
+      <input
+        type="text"
+        inputMode="numeric"
+        aria-label="Andamento em bpm"
+        value={draft ?? String(bpm)}
+        onFocus={(e) => {
+          setDraft(String(bpm));
+          requestAnimationFrame(() => e.target.select());
+        }}
+        onChange={(e) => setDraft(e.target.value.replace(/[^0-9.,]/g, '').slice(0, 5))}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+          if (e.key === 'Escape') {
+            setDraft(null);
+            requestAnimationFrame(() => (e.target as HTMLInputElement).blur());
+          }
+        }}
+      />
+      <span>bpm</span>
+    </label>
+  );
 }
 
 function parseHands(q: string | null, avail: Hand[]): Hand[] {
@@ -147,7 +186,7 @@ function PlayerInner({ song, query }: { song: Song; query: URLSearchParams }) {
     let acc = 0;
     const loop = () => {
       engine.update();
-      timeRef.current = engine.tickToSec(engine.tick);
+      timeRef.current = engine.secAt(engine.tick);
       const t = performance.now();
       if (engine.status === 'playing') acc += (t - lastLog) / 1000;
       lastLog = t;
@@ -226,8 +265,8 @@ function PlayerInner({ song, query }: { song: Song; query: URLSearchParams }) {
       .map((e) => ({
         id: `${e.elId}:${e.keyIndex}`,
         midi: e.midi,
-        start: engine.tickToSec(e.t),
-        dur: engine.tickToSec(e.d),
+        start: engine.secAt(e.t),
+        dur: engine.secAt(e.t + e.d) - engine.secAt(e.t),
         hand: e.hand,
         finger: e.finger,
         active: engine.opts.mode === 'listen' || engine.opts.hands.includes(e.hand),
@@ -236,7 +275,7 @@ function PlayerInner({ song, query }: { song: Song; query: URLSearchParams }) {
   }, [engine, engine.opts.tempoFactor, engine.opts.hands, engine.opts.loop, engine.opts.mode]);
 
   const barTimes = useMemo(
-    () => song.measures.map((m) => engine.tickToSec(m.start)),
+    () => song.measures.map((m) => engine.secAt(m.start)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [song, engine.opts.tempoFactor],
   );
@@ -263,13 +302,17 @@ function PlayerInner({ song, query }: { song: Song; query: URLSearchParams }) {
     setResult(null);
   };
 
-  // andamento de 5 em 5 bpm (o fator é relativo ao andamento da música)
-  const setBpm = (delta: number) => {
-    const cur = Math.round(song.tempo * opts.tempoFactor);
-    const target = Math.round((cur + delta) / 5) * 5 || cur + delta;
-    const f = Math.max(0.3, Math.min(1.5, target / song.tempo));
-    engine.setOptions({ tempoFactor: Math.round(f * 1000) / 1000 });
+  // andamento em bpm (o fator é relativo ao andamento principal da música; mudanças de andamento acompanham)
+  const bpm = Math.round(song.tempo * opts.tempoFactor);
+  const setBpmTo = (target: number) => {
+    const b = Math.max(BPM_MIN, Math.min(BPM_MAX, target));
+    if (b === bpm) return;
+    engine.setOptions({ tempoFactor: Math.round((b / song.tempo) * 10000) / 10000 });
   };
+  // botões − / +: de 5 em 5 bpm
+  const setBpm = (delta: number) => setBpmTo(Math.round((bpm + delta) / 5) * 5 || bpm + delta);
+  const [tLo, tHi] = tempoRange(song);
+  const tempoVaries = Math.round(tHi) - Math.round(tLo) >= 1;
 
   const playPause = async () => {
     await resumeAudio();
@@ -481,9 +524,7 @@ function PlayerInner({ song, query }: { song: Song; query: URLSearchParams }) {
             <button className="btn sm icon" aria-label="5 bpm mais devagar" onClick={() => setBpm(-5)}>
               −
             </button>
-            <span className="chip" title="Andamento">
-              <Icon name="metronome" size={14} /> {Math.round(song.tempo * opts.tempoFactor)} bpm
-            </span>
+            <BpmInput bpm={bpm} onSet={setBpmTo} className="chip" />
             <button className="btn sm icon" aria-label="5 bpm mais rápido" onClick={() => setBpm(5)}>
               +
             </button>
@@ -518,17 +559,34 @@ function PlayerInner({ song, query }: { song: Song; query: URLSearchParams }) {
 
       <Sheet open={showOpts} onClose={() => setShowOpts(false)} title="Opções de prática">
         <div className="field">
-          <span className="label">
-            Andamento: {Math.round(song.tempo * opts.tempoFactor)} bpm ({Math.round(opts.tempoFactor * 100)}% do original, {song.tempo} bpm)
-          </span>
+          <div className="row" style={{ justifyContent: 'space-between', gap: 8 }}>
+            <span className="label" style={{ margin: 0 }}>
+              Andamento ({Math.round(opts.tempoFactor * 100)}% do original, {Math.round(song.tempo)} bpm)
+            </span>
+            <div className="row nowrap" style={{ gap: 6 }}>
+              <BpmInput bpm={bpm} onSet={setBpmTo} className="field-like" />
+              {Math.abs(opts.tempoFactor - 1) > 0.001 && (
+                <button className="btn sm ghost" onClick={() => engine.setOptions({ tempoFactor: 1 })}>
+                  Original
+                </button>
+              )}
+            </div>
+          </div>
           <input
             type="range"
-            min={Math.max(20, Math.round(song.tempo * 0.3))}
-            max={Math.round(song.tempo * 1.5)}
+            min={Math.max(BPM_MIN, Math.min(bpm, Math.round(song.tempo * 0.3)))}
+            max={Math.min(BPM_MAX, Math.max(bpm, Math.round(song.tempo * 1.5)))}
             step={1}
-            value={Math.round(song.tempo * opts.tempoFactor)}
-            onChange={(e) => engine.setOptions({ tempoFactor: Math.round((Number(e.target.value) / song.tempo) * 1000) / 1000 })}
+            value={bpm}
+            aria-label="Andamento"
+            onChange={(e) => setBpmTo(Number(e.target.value))}
           />
+          {tempoVaries && (
+            <span className="tiny muted">
+              Esta música muda de andamento ({Math.round(tLo)}–{Math.round(tHi)} bpm no original). O valor acima é o andamento principal; as mudanças
+              acompanham na mesma proporção.
+            </span>
+          )}
         </div>
         <Toggle label="Metrônomo" hint="Nos modos 'No tempo' e 'Ouvir'" checked={opts.metronome} onChange={(v) => engine.setOptions({ metronome: v })} />
         {avail.length > 1 && (

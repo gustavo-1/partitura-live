@@ -178,7 +178,14 @@ export function importMusicXml(xml: string, fileName: string): Song {
   let divisions = 1;
   let fifths = 0;
   let timeSig: [number, number] = [4, 4];
-  let tempo = 0;
+  // marcas de andamento ao longo da música (semínimas por minuto), na ordem em que se toca
+  const tempos: { t: number; qpm: number }[] = [];
+  const setTempo = (t: number, qpm: number) => {
+    if (!(qpm > 0)) return;
+    const last = tempos[tempos.length - 1];
+    if (last && last.t === t) last.qpm = qpm;
+    else if (!last || Math.abs(last.qpm - qpm) > 0.005) tempos.push({ t, qpm });
+  };
   const clefs: Clef[] = [];
   const raw: RawNote[] = [];
   const measures: Measure[] = [];
@@ -229,12 +236,12 @@ export function importMusicXml(xml: string, fileName: string): Song {
         case 'direction':
         case 'sound': {
           const s = el.tagName === 'sound' ? el : el.querySelector('sound');
-          const t = s?.getAttribute('tempo');
-          if (t && !tempo) tempo = Math.round(Number(t));
-          if (!tempo) {
+          const t = Number(s?.getAttribute('tempo'));
+          if (t > 0) setTempo(mStart + cursor, t);
+          else {
             const pm = num(el, 'metronome > per-minute', 0);
             // o metrônomo pode ser em mínima, semínima pontuada etc.: converte para semínimas
-            if (pm) tempo = Math.round(pm * beatUnitQuarters(txt(el, 'metronome > beat-unit'), !!el.querySelector('metronome > beat-unit-dot')));
+            if (pm) setTempo(mStart + cursor, pm * beatUnitQuarters(txt(el, 'metronome > beat-unit'), !!el.querySelector('metronome > beat-unit-dot')));
           }
           const dynAttr = s?.getAttribute('dynamics');
           if (dynAttr && Number(dynAttr) > 0) vel = Math.max(0.15, Math.min(1, (Number(dynAttr) / 100) * 0.72));
@@ -385,13 +392,23 @@ export function importMusicXml(xml: string, fileName: string): Song {
   fillVoiceGaps(notes, measures, () => id++);
 
   const staffHands: Hand[] = clefs.map((c, i) => (nStaves === 1 ? (c === 'bass' ? 'L' : 'R') : i === 0 ? 'R' : 'L'));
+  // andamento: o primeiro vale desde o início; o "principal" é o que dura mais
+  if (!tempos.length) tempos.push({ t: 0, qpm: 100 });
+  else tempos[0].t = 0;
+  const span = new Map<number, number>();
+  tempos.forEach((x, i) => {
+    const q = Math.round(x.qpm * 100) / 100;
+    span.set(q, (span.get(q) ?? 0) + (tempos[i + 1]?.t ?? mStart) - x.t);
+  });
+  const tempo = [...span.entries()].sort((a, b) => b[1] - a[1])[0][0];
   const song: Song = {
     id: 'imp-' + slug(title) + '-' + Date.now().toString(36),
     title,
     composer: composer ?? 'Importado (MusicXML)',
     level: 1,
     source: 'import',
-    tempo: tempo || 100,
+    tempo,
+    tempoMap: tempos.length > 1 ? tempos.map((x) => ({ t: x.t, qpm: Math.round(x.qpm * 1000) / 1000 })) : undefined,
     timeSig: measures[0]?.timeSig ?? [4, 4],
     keySig: measures[0]?.keySig ?? 0,
     staves: nStaves,

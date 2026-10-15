@@ -9,6 +9,8 @@ export interface RawChord {
   fingers?: (number | undefined)[];
   /** intensidade de cada nota (0..1) */
   vels?: number[];
+  /** quanto cada nota soa no arquivo original (ticks); a escrita pode ser mais curta para caber na voz */
+  sdurs?: number[];
 }
 
 export interface RawStaff {
@@ -63,14 +65,52 @@ export interface SongMeta {
   keySig: number;
   source: Song['source'];
   level?: number;
+  /** mudanças de fórmula de compasso (ticks); aplicadas na barra seguinte se caírem no meio de um compasso */
+  timeSigs?: { t: number; ts: [number, number] }[];
+}
+
+/** Compassos até cobrir `end`, seguindo as mudanças de fórmula de compasso. */
+export function buildMeasures(meta: Pick<SongMeta, 'timeSig' | 'keySig' | 'timeSigs'>, end: number): Measure[] {
+  const changes = (meta.timeSigs ?? []).filter((c) => c.ts[0] > 0 && c.ts[1] > 0).sort((a, b) => a.t - b.t);
+  const measures: Measure[] = [];
+  let ts = meta.timeSig;
+  let start = 0;
+  let ci = 0;
+  while (measures.length === 0 || start < end - 1e-6) {
+    let changed = measures.length === 0;
+    while (ci < changes.length && changes[ci].t <= start + PPQ / 16) {
+      const nts = changes[ci].ts;
+      if (nts[0] !== ts[0] || nts[1] !== ts[1]) {
+        ts = [nts[0], nts[1]];
+        changed = true;
+      }
+      ci++;
+    }
+    const length = measureTicks(ts);
+    measures.push({ index: measures.length, start, length, timeSig: ts, keySig: meta.keySig, timeSigChange: changed, keySigChange: measures.length === 0 });
+    start += length;
+    if (measures.length > 5000) break;
+  }
+  return measures;
 }
 
 /** Monta uma música notada a partir de acordes em ticks (compassos, pausas, ligaduras). */
 export function songFromChords(meta: SongMeta, staves: RawStaff[]): Song {
-  const mLen = measureTicks(meta.timeSig);
   let end = 0;
   for (const s of staves) for (const c of s.chords) end = Math.max(end, c.start + c.dur);
-  const nMeasures = Math.max(1, Math.ceil(end / mLen - 1e-6));
+  const measures = buildMeasures(meta, end);
+  const nMeasures = measures.length;
+  const total = measures[nMeasures - 1].start + measures[nMeasures - 1].length;
+  const measureIdx = (t: number) => {
+    let lo = 0;
+    let hi = nMeasures - 1;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if (measures[mid].start <= t) lo = mid;
+      else hi = mid - 1;
+    }
+    return lo;
+  };
   // pautas: várias vozes podem dividir a mesma pauta
   const nStaves = Math.max(1, ...staves.map((s, i) => (s.staff ?? i) + 1));
   const clefs: Clef[] = [];
@@ -83,10 +123,6 @@ export function songFromChords(meta: SongMeta, staves: RawStaff[]): Song {
   for (let i = 0; i < nStaves; i++) {
     clefs[i] ??= i === 0 ? 'treble' : 'bass';
     staffHands[i] ??= i === 0 ? 'R' : 'L';
-  }
-  const measures: Measure[] = [];
-  for (let i = 0; i < nMeasures; i++) {
-    measures.push({ index: i, start: i * mLen, length: mLen, timeSig: meta.timeSig, keySig: meta.keySig, timeSigChange: i === 0, keySigChange: i === 0 });
   }
   const notes: NoteEl[] = [];
   let id = 0;
@@ -106,13 +142,13 @@ export function songFromChords(meta: SongMeta, staves: RawStaff[]): Song {
       const stop = start + dur;
       const pieces: { t: number; d: number; dur: string; dots: number; tuplet?: { actual: number; normal: number } }[] = [];
       while (t < stop - 1) {
-        const mi = Math.min(nMeasures - 1, Math.floor(t / mLen));
-        const mEnd = (mi + 1) * mLen;
+        const m = measures[measureIdx(t)];
+        const mEnd = m.start + m.length;
         const segEnd = Math.min(stop, mEnd);
         const segLen = segEnd - t;
         if (segLen <= 0) break;
-        if (!c && Math.abs(t - mi * mLen) < 1 && Math.abs(segLen - mLen) < 1) {
-          pieces.push({ t, d: mLen, dur: 'w', dots: 0 });
+        if (!c && Math.abs(t - m.start) < 1 && Math.abs(segLen - m.length) < 1) {
+          pieces.push({ t, d: m.length, dur: 'w', dots: 0 });
           t = segEnd;
           continue;
         }
@@ -120,8 +156,8 @@ export function songFromChords(meta: SongMeta, staves: RawStaff[]): Song {
         t = segEnd;
       }
       pieces.forEach((p, i) => {
-        const mi = Math.min(nMeasures - 1, Math.floor((p.t + 1) / mLen));
-        const full = !c && p.d === mLen && p.dur === 'w';
+        const mi = measureIdx(p.t + 1);
+        const full = !c && p.d === measures[mi].length && p.dur === 'w';
         notes.push({
           id: id++,
           t: p.t,
@@ -135,6 +171,7 @@ export function songFromChords(meta: SongMeta, staves: RawStaff[]): Song {
           fingers: c && i === 0 ? c.fingers : undefined,
           tieStart: c && i < pieces.length - 1 ? c.pitches.map(() => true) : undefined,
           vel: c?.vels,
+          sdur: c?.sdurs && i === 0 ? c.sdurs : undefined,
           measure: mi,
           fullRest: full || undefined,
           // pausas da segunda voz ficam invisíveis
@@ -149,7 +186,6 @@ export function songFromChords(meta: SongMeta, staves: RawStaff[]): Song {
       if (d > 0) push(s, d, c);
       cursor = Math.max(cursor, c.start + c.dur);
     }
-    const total = nMeasures * mLen;
     if (cursor < total) push(cursor, total - cursor, null);
   });
 

@@ -2743,3 +2743,114 @@ a.chip-btn {
   display: flex;
   justify-content: flex-start;
 }
+
+/* andamento digitável */
+.bpm-input {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: text;
+}
+.bpm-input input {
+  width: 3.4ch;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  text-align: right;
+  min-height: 0;
+  box-shadow: none;
+}
+.bpm-input input:focus {
+  outline: none;
+  border-bottom: 2px solid var(--accent);
+}
+.bpm-input:focus-within {
+  border-color: var(--accent);
+}
+.bpm-input.field-like {
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-2);
+  font-size: 15px;
+}
+.bpm-input.field-like input {
+  width: 4ch;
+}
+
+/* escolha de trilhas (MIDI) e fidelidade da conversão */
+.track-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 46vh;
+  overflow-y: auto;
+  margin: 6px 0;
+}
+.track-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.track-row.on {
+  border-color: var(--accent);
+  background: var(--surface-2);
+}
+.track-row.off {
+  opacity: 0.55;
+}
+.track-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 200px;
+  min-width: 0;
+  cursor: pointer;
+}
+.track-main > span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.track-main b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.track-main input {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+.track-row .seg button {
+  padding: 4px 9px;
+  font-size: 12px;
+}
+.fidelity {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  font-size: 14px;
+}
+.fidelity.good {
+  border-color: color-mix(in srgb, var(--ok) 55%, var(--line));
+}
+.fidelity.mid {
+  border-color: color-mix(in srgb, var(--warn) 60%, var(--line));
+}
+.fidelity.low {
+  border-color: color-mix(in srgb, var(--bad) 60%, var(--line));
+}

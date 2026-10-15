@@ -28,7 +28,7 @@ Funciona no navegador do celular, tablet ou computador, pode ser **instalado com
 | 🃏 **Treino de leitura** | Cartões com notas na pauta que se adaptam: as notas que você erra, demora ou que "venceram" a data de revisão aparecem mais (repetição espaçada). Mapa de calor das notas. |
 | ✨ **Leitura à primeira vista** | Exercícios novos gerados no seu nível, infinitos. |
 | 🥁 **Treino de ritmo** | Leia e bata ritmos com o metrônomo (toque na tela, barra de espaço ou qualquer tecla do piano). |
-| 📂 **Suas músicas** | Importe **MusicXML** (.musicxml/.mxl) ou **MIDI** (.mid, convertido em partitura automaticamente). A conversão mantém notas longas sob acompanhamento (segunda voz), tercinas, pedal de sustentação, intensidade das notas, ritornelos e casas de 1ª/2ª vez. |
+| 📂 **Suas músicas** | Importe **MusicXML** (.musicxml/.mxl) ou **MIDI** (.mid, convertido em partitura automaticamente). MIDI com vários instrumentos: você escolhe quais trilhas viram partitura e de que mão é cada uma (ouvindo cada trilha antes). A conversão segue as **mudanças de andamento e de compasso** do arquivo, mantém notas longas sob acompanhamento (segunda voz), tercinas, fusas, pedal, intensidade, a duração real de cada nota, ritornelos e casas de 1ª/2ª vez — e mostra um **relatório de fidelidade** (quantas notas ficaram no instante exato do arquivo) com botões para ouvir **o arquivo original × a partitura convertida**. O andamento do player aceita qualquer valor digitado (20–300 bpm). |
 | 📈 **Progresso** | Estrelas, XP e **níveis**, sequência de dias, **meta diária em minutos** (você escolhe), tempo de prática, melhores resultados. Backup/restauração em JSON. |
 | 🎁 **Missões do dia** | 3 missões por dia (uma de revisar, uma de aprender, uma extra). Cumprir as 3 dá XP e uma **proteção de sequência** 🧊 (cobre um dia sem prática). |
 | 👤 **Conta** | Login com Google ou e-mail e senha. A sessão fica guardada no aparelho; o progresso vai para a nuvem e aparece em qualquer aparelho (funciona offline e sincroniza depois). |
@@ -155,7 +155,7 @@ O app traz 26 músicas prontas e uma biblioteca compartilhada:
 
 ## Onde achar partituras
 
-- **Arquivos MIDI** (.mid) de qualquer música: o app converte em partitura (prefira MIDIs de piano com poucas notas).
+- **Arquivos MIDI** (.mid) de qualquer música: o app converte em partitura. Se o arquivo tiver vários instrumentos (trilha sonora, karaokê, sequenciadores online), escolha só as partes que quer tocar — misturar cordas, voz e baixo no piano deixa as notas se atropelando.
 - **MuseScore Studio** (programa gratuito para computador): digite ou edite uma partitura e use *Exportar → MusicXML*.
 - **IMSLP** e **Mutopia Project**: domínio público, muitas com MIDI/MusicXML.
 - **OpenScore**: partituras clássicas digitadas, licença livre.

@@ -8,7 +8,7 @@
 import type { Unsubscribe } from 'firebase/firestore';
 import type { FB } from './firebase';
 import { createStore } from './store';
-import { packSong, unpackSong } from './cloudSongs';
+import { packForCloud, unpackSong } from './cloudSongs';
 import { setRemoteResolver } from '../data/library';
 import { handsInSong } from '../music/timeline';
 import type { Song } from '../music/types';
@@ -95,12 +95,26 @@ export type ShareResult = 'ok' | 'already' | 'too-big' | 'signed-out' | 'error';
 export async function shareSong(song: Song, fileName = ''): Promise<ShareResult> {
   if (!fb || !me) return 'signed-out';
   if (isShared(song.id)) return 'already';
-  const bytes = packSong(song);
-  if (bytes.length > MAX_BYTES) return 'too-big';
-  const { fs, db } = fb;
+  const bytes = packForCloud(song, MAX_BYTES);
+  if (!bytes) return 'too-big';
+  const batch = writeShared(song, bytes, fileName, Date.now());
+  try {
+    await batch.commit();
+    cache.set(song.id, song);
+    return 'ok';
+  } catch {
+    // outra pessoa já publicou a mesma música (mesmo id)
+    const { fs, db } = fb;
+    const exists = await fs.getDoc(fs.doc(db, 'library', song.id)).catch(() => null);
+    return exists?.exists() ? 'already' : 'error';
+  }
+}
+
+function writeShared(song: Song, bytes: Uint8Array, fileName: string, createdAt: number) {
+  const { fs, db } = fb!;
   const hands = handsInSong(song);
   const batch = fs.writeBatch(db);
-  batch.set(fs.doc(db, 'libraryData', song.id), { ownerUid: me.uid, data: fs.Bytes.fromUint8Array(bytes), createdAt: Date.now() });
+  batch.set(fs.doc(db, 'libraryData', song.id), { ownerUid: me!.uid, data: fs.Bytes.fromUint8Array(bytes), createdAt });
   batch.set(fs.doc(db, 'library', song.id), {
     title: (song.title || 'Sem título').slice(0, 120),
     composer: song.composer ? song.composer.slice(0, 120) : null,
@@ -108,18 +122,26 @@ export async function shareSong(song: Song, fileName = ''): Promise<ShareResult>
     hands: hands.length === 2 ? 'RL' : hands[0] ?? 'R',
     measures: song.measures.length,
     fileName: fileName.slice(0, 200),
-    ownerUid: me.uid,
-    ownerName: (me.name || 'Alguém').slice(0, 40),
-    createdAt: Date.now(),
+    ownerUid: me!.uid,
+    ownerName: (me!.name || 'Alguém').slice(0, 40),
+    createdAt,
   });
+  return batch;
+}
+
+/** Música reconvertida: atualiza a cópia da comunidade, se for sua. */
+export async function updateSharedSong(song: Song, fileName = ''): Promise<boolean> {
+  if (!fb || !me) return false;
+  const meta = community.get().songs.find((s) => s.id === song.id);
+  if (!meta || meta.ownerUid !== me.uid) return false;
+  const bytes = packForCloud(song, MAX_BYTES);
+  if (!bytes) return false;
   try {
-    await batch.commit();
+    await writeShared(song, bytes, fileName, meta.createdAt).commit();
     cache.set(song.id, song);
-    return 'ok';
+    return true;
   } catch {
-    // outra pessoa já publicou a mesma música (mesmo id)
-    const exists = await fs.getDoc(fs.doc(db, 'library', song.id)).catch(() => null);
-    return exists?.exists() ? 'already' : 'error';
+    return false;
   }
 }
 

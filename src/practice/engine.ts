@@ -5,7 +5,7 @@ import { click } from '../audio/metronome';
 import { playNote, type Voice } from '../audio/piano';
 import { isHarmonicOf } from '../audio/detector';
 import { beatTicks, measureTicks, midiName, type NamingStyle } from '../music/theory';
-import { buildEvents, buildSteps, songEnd } from '../music/timeline';
+import { buildEvents, buildSteps, measureAt, qpmAt, secsToTick, songEnd, tempoSegs, tickToSecs, type TempoSeg } from '../music/timeline';
 import { PPQ, type Hand, type PlayEvent, type PracticeStep, type Song } from '../music/types';
 import type { Ghost, NoteMark } from '../components/score/Score';
 
@@ -79,7 +79,9 @@ export class PracticeEngine {
    * Âncora do relógio nos modos "no tempo" e "ouvir": a posição vem do relógio de áudio,
    * então um quadro lento (celular ocupado desenhando) não atrasa a música.
    */
-  private anchor: { ctx: number; tick: number; tps: number } | null = null;
+  private anchor: { ctx: number; sec: number; factor: number } | null = null;
+  /** mapa de andamento (a música pode acelerar/desacelerar) */
+  private segs: TempoSeg[];
   /** sons já agendados para o futuro (cancelados ao pausar, mudar andamento etc.) */
   private scheduled: { v: Voice; at: number }[] = [];
   private startTick = 0;
@@ -98,6 +100,7 @@ export class PracticeEngine {
     this.song = song;
     this.opts = { ...opts };
     this.events = buildEvents(song);
+    this.segs = tempoSegs(song);
     this.rebuild();
   }
 
@@ -113,14 +116,19 @@ export class PracticeEngine {
     this.listeners.forEach((fn) => fn());
   }
 
+  /** andamento em vigor agora (já com o ajuste de velocidade) */
   get qpm(): number {
-    return this.song.tempo * this.opts.tempoFactor;
+    return qpmAt(this.segs, this.tick) * this.opts.tempoFactor;
   }
   get ticksPerSec(): number {
     return (this.qpm * PPQ) / 60;
   }
-  tickToSec(t: number): number {
-    return t / this.ticksPerSec;
+  /** segundos do início da música até o tick, no andamento escolhido (segue as mudanças de andamento) */
+  secAt(t: number): number {
+    return tickToSecs(this.segs, t) / this.opts.tempoFactor;
+  }
+  tickAt(sec: number): number {
+    return secsToTick(this.segs, sec * this.opts.tempoFactor);
   }
   get range(): [number, number] {
     return [this.startTick, this.endTick];
@@ -169,7 +177,7 @@ export class PracticeEngine {
     this.evalIndex = 0;
     this.tick = this.startTick - this.preRoll();
     this.scheduledUntil = this.tick;
-    this.metroUntil = this.tick;
+    this.metroUntil = this.tick - 1; // inclui a primeira batida da contagem
     this.anchor = null;
     this.refreshMarks();
   }
@@ -182,7 +190,7 @@ export class PracticeEngine {
   }
 
   private preRoll(): number {
-    const ts = this.song.measures[0]?.timeSig ?? [4, 4];
+    const ts = this.song.measures[measureAt(this.song, this.startTick)]?.timeSig ?? [4, 4];
     if (this.opts.mode === 'wait') return beatTicks(ts);
     // contagem de um compasso
     return measureTicks(ts);
@@ -227,19 +235,15 @@ export class PracticeEngine {
     let next: number;
     if (this.opts.mode === 'wait') {
       const dt = Math.min(0.1, Math.max(0, t - this.lastCtx));
-      next = this.tick + dt * this.ticksPerSec;
+      next = this.tickAt(this.secAt(this.tick) + dt);
       const step = this.steps[this.pending];
       if (step && next > step.t) next = step.t; // espera o aluno
       this.anchor = null;
     } else {
-      const tps = this.ticksPerSec;
-      if (!this.anchor || this.anchor.tps !== tps) this.anchor = { ctx: t, tick: this.tick, tps };
-      next = this.anchor.tick + (t - this.anchor.ctx) * tps;
+      const factor = this.opts.tempoFactor;
       // aba em segundo plano por muito tempo: retoma de onde estava em vez de pular a música
-      if (next - this.tick > tps * 1.0) {
-        this.anchor = { ctx: t, tick: this.tick, tps };
-        next = this.tick;
-      }
+      if (!this.anchor || this.anchor.factor !== factor || t - this.lastCtx > 1.0) this.anchor = { ctx: t, sec: this.secAt(this.tick), factor };
+      next = this.tickAt(this.anchor.sec + (t - this.anchor.ctx));
     }
     this.lastCtx = t;
     this.tick = next;
@@ -316,27 +320,18 @@ export class PracticeEngine {
   // ---- áudio agendado (metrônomo, acompanhamento, modo ouvir) ----
   private scheduleAudio(ctxNow: number) {
     // margem maior nos modos com som contínuo: aguenta quadros lentos sem buracos
-    const ahead = (this.opts.mode === 'wait' ? 0.15 : 0.3) * this.ticksPerSec;
-    const horizon = this.tick + ahead;
-    const toCtx = (tk: number) => ctxNow + (tk - this.tick) / this.ticksPerSec;
+    const nowSec = this.secAt(this.tick);
+    const horizon = this.tickAt(nowSec + (this.opts.mode === 'wait' ? 0.15 : 0.3));
+    const toCtx = (tk: number) => ctxNow + this.secAt(tk) - nowSec;
     const blocked = this.opts.mode === 'wait';
 
     // metrônomo (e contagem inicial)
     if (!blocked) {
-      const ts = this.song.measures[0]?.timeSig ?? [4, 4];
-      const bt = beatTicks(ts);
-      const mt = measureTicks(ts);
-      let b = Math.ceil(this.metroUntil / bt) * bt;
-      if (b === this.metroUntil && this.metroUntil !== this.startTick - this.preRoll()) b += bt;
-      for (; b <= horizon; b += bt) {
-        if (b < this.tick - 1) continue;
-        const inCount = b < this.startTick;
-        if (this.opts.metronome || inCount) {
-          const accent = inCount
-            ? Math.round(b - (this.startTick - this.preRoll())) % mt === 0
-            : this.song.measures.some((m) => m.start === Math.round(b));
-          const at = toCtx(b);
-          this.scheduled.push({ v: click(at, accent), at });
+      for (const b of this.beats(this.metroUntil, horizon)) {
+        if (b.t < this.tick - 1) continue;
+        if (this.opts.metronome || b.count) {
+          const at = toCtx(b.t);
+          this.scheduled.push({ v: click(at, b.accent), at });
         }
       }
       this.metroUntil = Math.max(this.metroUntil, horizon);
@@ -350,19 +345,39 @@ export class PracticeEngine {
       return;
     }
     for (const e of this.events) {
-      if (e.t < this.startTick || e.t >= this.endTick) continue;
+      if (e.t < this.startTick || e.t >= this.endTick || e.dup) continue;
       if (e.t <= this.scheduledUntil || e.t > horizon) continue;
       if (!playAll && this.opts.hands.includes(e.hand)) continue;
       const when = toCtx(e.t);
       // ficou para trás (quadro muito lento): pular é melhor do que tocar tudo de uma vez
       if (when < ctxNow - 0.03) continue;
-      const dur = (e.sd ?? e.d) / this.ticksPerSec;
+      const dur = this.secAt(e.t + (e.sd ?? e.d)) - this.secAt(e.t);
       const vel = e.vel !== undefined ? 0.25 + 0.75 * e.vel : 0.7;
       this.scheduled.push({ v: playNote(e.midi, when, dur * (e.sd ? 1 : 0.95), vel), at: when });
       mic.ignoreNotes([e.midi], when + dur + 0.3);
     }
     if (this.scheduled.length > 64) this.scheduled = this.scheduled.filter((x) => x.at > ctxNow - 0.05);
     this.scheduledUntil = horizon;
+  }
+
+  /** Batidas do metrônomo em (de, até]: contagem antes do início e tempos de cada compasso (segue mudanças de compasso). */
+  private beats(from: number, to: number): { t: number; accent: boolean; count: boolean }[] {
+    const out: { t: number; accent: boolean; count: boolean }[] = [];
+    const cs = this.startTick - this.preRoll();
+    if (from < this.startTick) {
+      const ts = this.song.measures[measureAt(this.song, this.startTick)]?.timeSig ?? [4, 4];
+      const bt = beatTicks(ts);
+      for (let b = cs; b < this.startTick - 1 && b <= to; b += bt) if (b > from) out.push({ t: b, accent: b === cs, count: true });
+    }
+    const ms = this.song.measures;
+    for (let i = Math.max(0, measureAt(this.song, Math.max(from, this.startTick))); i < ms.length && ms[i].start <= to; i++) {
+      const m = ms[i];
+      const bt = beatTicks(m.timeSig);
+      for (let b = m.start; b < m.start + m.length - 1; b += bt) {
+        if (b > from && b <= to && b >= this.startTick && b < this.endTick) out.push({ t: b, accent: b === m.start, count: false });
+      }
+    }
+    return out;
   }
 
   // ---- entrada ----
@@ -456,8 +471,8 @@ export class PracticeEngine {
     // acompanhamento da outra mão
     if (this.opts.playOtherHand) {
       for (const ev of this.events) {
-        if (ev.t === step.t && !this.opts.hands.includes(ev.hand)) {
-          playNote(ev.midi, undefined, Math.min(1.5, ev.d / this.ticksPerSec), 0.6);
+        if (ev.t === step.t && !this.opts.hands.includes(ev.hand) && !ev.dup) {
+          playNote(ev.midi, undefined, Math.min(1.5, this.secAt(ev.t + (ev.sd ?? ev.d)) - this.secAt(ev.t)), ev.vel !== undefined ? 0.2 + 0.6 * ev.vel : 0.6);
           mic.ignoreNotes([ev.midi], now() + 1.2);
         }
       }

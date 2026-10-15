@@ -34,6 +34,8 @@ export function buildEvents(song: Song): PlayEvent[] {
           curKi = nk;
           j++;
         }
+        // som: duração real do arquivo (quando a importação a guardou) + pedal
+        const base = n.sdur?.[ki] ?? d;
         events.push({
           midi: k.midi,
           t: n.t,
@@ -45,13 +47,86 @@ export function buildEvents(song: Song): PlayEvent[] {
           finger: n.fingers?.[ki],
           measure: n.measure,
           vel: n.vel?.[ki],
-          sd: song.pedal?.length ? pedalEnd(song.pedal, n.t, n.t + d) - n.t : undefined,
+          sd: song.pedal?.length ? pedalEnd(song.pedal, n.t, n.t + base) - n.t : n.sdur ? base : undefined,
         });
       });
     });
   }
   events.sort((a, b) => a.t - b.t || a.midi - b.midi);
+  restrike(events);
   return events;
+}
+
+/**
+ * Tecla tocada de novo enquanto ainda soava (pedal, notas sobrepostas no arquivo, uníssono entre vozes):
+ * no piano a corda é a mesma, então o som anterior acaba ali — em vez de empilhar cópias da mesma nota.
+ */
+function restrike(events: PlayEvent[]) {
+  const last = new Map<number, PlayEvent>();
+  for (const e of events) {
+    const prev = last.get(e.midi);
+    if (prev) {
+      if (prev.t === e.t) e.dup = true;
+      else {
+        const end = prev.t + (prev.sd ?? prev.d);
+        if (end > e.t) prev.sd = e.t - prev.t;
+      }
+    }
+    if (!e.dup) last.set(e.midi, e);
+  }
+}
+
+// ---- andamento variável ----
+
+export interface TempoSeg {
+  t: number; // tick onde começa
+  qpm: number;
+  s: number; // segundos desde o tick 0 (andamento original)
+}
+
+/** Trechos de andamento da música (um só quando não há mudanças). */
+export function tempoSegs(song: Pick<Song, 'tempo' | 'tempoMap'>): TempoSeg[] {
+  const map = song.tempoMap?.length ? [...song.tempoMap].sort((a, b) => a.t - b.t) : [{ t: 0, qpm: song.tempo }];
+  if (map[0].t > 0) map.unshift({ t: 0, qpm: map[0].qpm });
+  const segs: TempoSeg[] = [];
+  let s = 0;
+  map.forEach((m, i) => {
+    if (i > 0) s += ((m.t - map[i - 1].t) / PPQ) * (60 / map[i - 1].qpm);
+    if (m.qpm > 0) segs.push({ t: m.t, qpm: m.qpm, s });
+  });
+  return segs.length ? segs : [{ t: 0, qpm: 100, s: 0 }];
+}
+
+function segIndex(segs: TempoSeg[], key: 't' | 's', v: number): number {
+  let lo = 0;
+  let hi = segs.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (segs[mid][key] <= v) lo = mid;
+    else hi = mid - 1;
+  }
+  return lo;
+}
+
+/** Segundos (andamento original) do tick 0 até `tick`; antes do início usa o primeiro andamento. */
+export function tickToSecs(segs: TempoSeg[], tick: number): number {
+  const g = segs[segIndex(segs, 't', tick)];
+  return g.s + ((tick - g.t) / PPQ) * (60 / g.qpm);
+}
+
+export function secsToTick(segs: TempoSeg[], sec: number): number {
+  const g = segs[segIndex(segs, 's', sec)];
+  return g.t + ((sec - g.s) * g.qpm * PPQ) / 60;
+}
+
+export function qpmAt(segs: TempoSeg[], tick: number): number {
+  return segs[segIndex(segs, 't', tick)].qpm;
+}
+
+/** Faixa de andamentos da música (para mostrar quando ele varia). */
+export function tempoRange(song: Pick<Song, 'tempo' | 'tempoMap'>): [number, number] {
+  const qs = tempoSegs(song).map((g) => g.qpm);
+  return [Math.min(...qs), Math.max(...qs)];
 }
 
 /** Com o pedal abaixado quando a tecla é solta, a nota continua soando até o pedal subir. */
@@ -114,4 +189,20 @@ export function handsInSong(song: Song): Hand[] {
   const hs = new Set<Hand>();
   for (const n of song.notes) if (n.keys.length) hs.add(staffHand(song, n.staff));
   return (['R', 'L'] as Hand[]).filter((h) => hs.has(h));
+}
+
+/** Notas como o app as toca (segundos no andamento original): o mesmo cálculo do modo "Ouvir". */
+export function songSounds(song: Song): { midi: number; time: number; dur: number; vel: number }[] {
+  const segs = tempoSegs(song);
+  return buildEvents(song)
+    .filter((e) => !e.dup)
+    .map((e) => {
+      const time = tickToSecs(segs, e.t);
+      return {
+        midi: e.midi,
+        time,
+        dur: (tickToSecs(segs, e.t + (e.sd ?? e.d)) - time) * (e.sd ? 1 : 0.95),
+        vel: e.vel !== undefined ? 0.25 + 0.75 * e.vel : 0.7,
+      };
+    });
 }

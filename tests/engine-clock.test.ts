@@ -19,11 +19,24 @@ vi.mock('../src/audio/piano', () => ({
     return { stop: (at?: number) => (rec.stopped = at ?? clock.t) };
   },
 }));
-vi.mock('../src/audio/metronome', () => ({ click: () => ({ stop() {} }) }));
+const clicks = vi.hoisted(() => [] as { at: number; accent: boolean }[]);
+vi.mock('../src/audio/metronome', () => ({
+  click: (at: number, accent: boolean) => {
+    clicks.push({ at, accent });
+    return { stop() {} };
+  },
+}));
 vi.mock('../src/audio/mic', () => ({ mic: { ignoreNotes() {}, suppress() {}, state: 'off' } }));
 
 import { PracticeEngine } from '../src/practice/engine';
 import { builtinSong } from '../src/data/songs';
+import { importMidi } from '../src/music/midiImport';
+import { Midi } from '@tonejs/midi';
+
+function midiBuf(m: Midi): ArrayBuffer {
+  const u8 = m.toArray();
+  return u8.buffer.slice(u8.byteOffset, u8.byteOffset + u8.byteLength) as ArrayBuffer;
+}
 
 function run(engine: PracticeEngine, seconds: number, frame: (i: number) => number) {
   let i = 0;
@@ -40,6 +53,48 @@ describe('relógio da reprodução', () => {
   beforeEach(() => {
     clock.t = 10;
     played.length = 0;
+    clicks.length = 0;
+  });
+
+  it('segue as mudanças de andamento da música, também com o andamento ajustado', () => {
+    const m = new Midi();
+    m.header.tempos.push({ ticks: 0, bpm: 120 }, { ticks: 4 * 480, bpm: 60 });
+    m.header.update();
+    const tr = m.addTrack();
+    for (let i = 0; i < 8; i++) tr.addNote({ midi: 60 + i, ticks: i * 960, durationTicks: 480 });
+    const song = importMidi(midiBuf(m), 'rit.mid');
+    for (const factor of [1, 0.5]) {
+      played.length = 0;
+      const engine = new PracticeEngine(song, { ...opts, tempoFactor: factor });
+      engine.start();
+      run(engine, 30, (i) => (i % 15 === 14 ? 120 : 16));
+      const sounding = played.filter((p) => p.stopped === undefined);
+      expect(sounding.map((p) => p.midi)).toEqual([60, 61, 62, 63, 64, 65, 66, 67]);
+      const t0 = sounding[0].when;
+      sounding.forEach((p, i) => {
+        // tonejs calcula o segundo de cada nota pelo mapa de andamento do arquivo
+        const ideal = tr.notes[i].time / factor;
+        expect(Math.abs(p.when - t0 - ideal) * 1000, `nota ${i} (fator ${factor})`).toBeLessThan(1);
+      });
+    }
+  });
+
+  it('metrônomo acompanha mudanças de compasso (acento em cada barra)', () => {
+    const m = new Midi();
+    m.header.tempos.push({ ticks: 0, bpm: 120 });
+    m.header.timeSignatures.push({ ticks: 0, timeSignature: [4, 4] }, { ticks: 4 * 480, timeSignature: [3, 4] });
+    m.header.update();
+    const tr = m.addTrack();
+    for (let i = 0; i < 10; i++) tr.addNote({ midi: 72, ticks: i * 480, durationTicks: 400 });
+    const song = importMidi(midiBuf(m), 'ts.mid');
+    const engine = new PracticeEngine(song, { ...opts, metronome: true });
+    engine.start();
+    run(engine, 8, () => 16);
+    // contagem (4) + 4/4 (4) + 3/4 (3) + 3/4 (3)…
+    const acc = clicks.map((c) => (c.accent ? 'A' : '.')).join('');
+    expect(acc.startsWith('A...' + 'A...' + 'A..' + 'A..')).toBe(true);
+    const gaps = clicks.slice(1).map((c, i) => Math.round((c.at - clicks[i].at) * 1000));
+    expect(new Set(gaps.slice(0, 12))).toEqual(new Set([500]));
   });
 
   it('quadros lentos não atrasam nem desalinham as notas', () => {

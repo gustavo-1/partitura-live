@@ -195,7 +195,8 @@ service cloud.firestore {
       allow update: if signedIn() && resource.data.ownerUid == me()
         && request.resource.data.keys().hasOnly(['ownerUid', 'data', 'createdAt'])
         && request.resource.data.ownerUid == me()
-        && request.resource.data.data is bytes;
+        && request.resource.data.data is bytes
+        && request.resource.data.data.size() <= 950000;
       allow delete: if signedIn() && resource.data.ownerUid == me();
     }
   }

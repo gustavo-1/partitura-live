@@ -32,6 +32,8 @@ export interface NoteEl {
   hidden?: boolean; // pausa invisível (preenchimento de voz secundária)
   /** intensidade de cada nota do acorde (0..1), quando a música importada traz essa informação */
   vel?: number[];
+  /** duração que soa no arquivo original (ticks), quando difere da escrita; só no primeiro pedaço ligado */
+  sdur?: number[];
 }
 
 export interface Measure {
@@ -65,10 +67,39 @@ export interface Song {
   pedal?: [number, number][];
   /** versão do importador que gerou a música (músicas importadas) */
   importVersion?: number;
+  /** mudanças de andamento ao longo da música (ticks -> semínimas por minuto); o primeiro em t=0 */
+  tempoMap?: { t: number; qpm: number }[];
+  /** arquivo original importado (para ouvir, comparar e reconverter) */
+  original?: SongOriginal;
+  /** resumo da conversão (quão fiel ao arquivo ficou) */
+  importReport?: ImportReport;
+}
+
+export interface SongOriginal {
+  kind: 'midi' | 'musicxml';
+  name: string;
+  /** MIDI em base64; MusicXML em texto */
+  data: string;
+  /** trilhas usadas (MIDI) e para qual mão foi cada uma */
+  tracks?: { index: number; hand: 'R' | 'L' | 'auto' }[];
+}
+
+export interface ImportReport {
+  notes: number;
+  /** notas no mesmo instante do arquivo (até 10 ms de diferença no andamento original) */
+  exact: number;
+  /** maior deslocamento de uma nota (ms) */
+  maxShiftMs: number;
+  /** notas repetidas iguais juntadas (mesma tecla no mesmo instante) */
+  merged: number;
+  tempoChanges: number;
+  timeSigChanges: number;
+  tracksUsed: string[];
+  tracksIgnored: string[];
 }
 
 /** Versão atual dos importadores de MIDI/MusicXML (sobe quando a conversão melhora). */
-export const IMPORT_VERSION = 2;
+export const IMPORT_VERSION = 3;
 
 export type Hand = 'R' | 'L';
 
@@ -87,6 +118,8 @@ export interface PlayEvent {
   vel?: number;
   /** quanto a nota soa de fato, com o pedal (ticks); só para o som */
   sd?: number;
+  /** mesma tecla, mesmo instante de outra nota (uníssono entre vozes): não toca duas vezes */
+  dup?: boolean;
 }
 
 /** Um "passo" de prática: todas as notas que começam no mesmo instante. */
