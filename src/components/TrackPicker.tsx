@@ -78,6 +78,7 @@ export default function TrackPicker({ fileName, data, initial, confirmLabel = 'I
                     {t.name ? `${t.instrument} · ` : ''}
                     {t.notes} notas
                     {t.percussion ? ' · bateria não vira partitura' : ` · ${midiName(t.lo, st.naming, true)}–${midiName(t.hi, st.naming, true)}`}
+                    {t.quiet && ' · quase sem som (trilha-guia)'}
                   </span>
                 </span>
               </label>

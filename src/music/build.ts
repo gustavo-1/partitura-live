@@ -9,8 +9,10 @@ export interface RawChord {
   fingers?: (number | undefined)[];
   /** intensidade de cada nota (0..1) */
   vels?: number[];
-  /** quanto cada nota soa no arquivo original (ticks); a escrita pode ser mais curta para caber na voz */
+  /** quanto cada nota soa no arquivo original (ticks, a partir do ataque real); a escrita pode ser mais curta */
   sdurs?: number[];
+  /** ataque real menos o escrito (ticks), para o som seguir a interpretação */
+  sofs?: number[];
 }
 
 export interface RawStaff {
@@ -172,6 +174,7 @@ export function songFromChords(meta: SongMeta, staves: RawStaff[]): Song {
           tieStart: c && i < pieces.length - 1 ? c.pitches.map(() => true) : undefined,
           vel: c?.vels,
           sdur: c?.sdurs && i === 0 ? c.sdurs : undefined,
+          sofs: c?.sofs && i === 0 ? c.sofs : undefined,
           measure: mi,
           fullRest: full || undefined,
           // pausas da segunda voz ficam invisíveis

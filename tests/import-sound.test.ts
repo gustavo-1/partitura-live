@@ -5,9 +5,9 @@
  */
 import { describe, expect, it } from 'vitest';
 import { Midi } from '@tonejs/midi';
-import { importMidi, midiTracks, needsTrackChoice, suggestTracks } from '../src/music/midiImport';
+import { importMidi, midiTracks, needsTrackChoice, originalSounds, suggestTracks } from '../src/music/midiImport';
 import { importMusicXml } from '../src/music/musicxml';
-import { buildEvents, tempoSegs, tickToSecs } from '../src/music/timeline';
+import { buildEvents, songSounds, tempoSegs, tickToSecs } from '../src/music/timeline';
 import { PPQ } from '../src/music/types';
 
 function toBuffer(m: Midi): ArrayBuffer {
@@ -289,5 +289,121 @@ describe('importação de MusicXML soa como o original', () => {
     expect(c.vel).toBeCloseTo(0.38, 2);
     expect(ev.find((e) => e.midi === 64)!.vel).toBeCloseTo(0.72, 2);
     expect(c.sd).toBeGreaterThan(c.d); // segura com o pedal
+  });
+});
+
+/** gerador pseudoaleatório fixo (testes reproduzíveis) */
+function rng(seed: number) {
+  let x = seed;
+  return () => {
+    x = (x * 1664525 + 1013904223) % 4294967296;
+    return x / 4294967296;
+  };
+}
+
+describe('tocado "à mão" (como no Online Sequencer e em MIDIs gravados ao vivo)', () => {
+  /**
+   * Arquivo diz 130 bpm, mas a música foi tocada a 125 bpm, com colcheias "balançadas" (swing)
+   * e a imprecisão de uma pessoa (±20 ms). Esquerda: Sol-Sib-Ré-Sol… como em City of Stars.
+   */
+  function handPlayed(opts: { real?: number; file?: number; swing?: number; bars?: number } = {}) {
+    const { real = 125, file = 130, swing = 0.66, bars = 16 } = opts;
+    const m = new Midi();
+    m.header.tempos.push({ ticks: 0, bpm: file });
+    m.header.update();
+    const tr = m.addTrack();
+    const r = rng(7);
+    const q = m.header.ppq;
+    const sec = (beat: number) => (beat * 60) / real + (r() - 0.5) * 0.04; // onde a pessoa tocou (s)
+    const tick = (s: number) => Math.max(0, Math.round((s * file * q) / 60)); // como o arquivo guarda
+    const pattern: [number, number, number][] = [
+      [43, 0, 0.75],
+      [46, swing, 0.5],
+      [50, 1, 0.75],
+      [55, 1 + swing, 0.5],
+      [55, 2 + swing, 0.5],
+      [53, 3, 0.75],
+      [50, 3 + swing, 0.25],
+    ];
+    const played: { midi: number; beat: number }[] = [];
+    for (let bar = 0; bar < bars; bar++) {
+      for (const [midi, b, d] of pattern) {
+        const s0 = sec(bar * 4 + b);
+        tr.addNote({ midi, ticks: tick(s0), durationTicks: Math.round((d * 60 * file * q) / 60 / real), velocity: 0.4 });
+        played.push({ midi, beat: bar * 4 + b });
+      }
+      // melodia: semínimas e uma colcheia balançada
+      for (const [midi, b] of [
+        [74, 0],
+        [72, 1],
+        [70, 2],
+        [69, 2 + swing],
+        [67, 3],
+      ] as [number, number][]) {
+        tr.addNote({ midi, ticks: tick(sec(bar * 4 + b)), durationTicks: Math.round(q * 0.9), velocity: 0.6 });
+        played.push({ midi, beat: bar * 4 + b });
+      }
+    }
+    return { m, tr, played };
+  }
+
+  it('acha o andamento de verdade e refaz os compassos', () => {
+    const { m } = handPlayed();
+    const s = importMidi(toBuffer(m), 'cos.mid');
+    expect(s.importReport?.tempoFix?.file).toBe(130);
+    expect(Math.abs(s.tempo - 125)).toBeLessThan(1);
+    expect(s.measures.length).toBe(16);
+  });
+
+  it('o som fica idêntico ao arquivo (cada nota no mesmo instante e com a mesma duração)', () => {
+    const { m, tr } = handPlayed();
+    const s = importMidi(toBuffer(m), 'cos.mid');
+    expect(s.importReport?.exact).toBe(tr.notes.length);
+    const o = originalSounds(m, [0]);
+    const c = songSounds(s);
+    expect(c.length).toBe(o.length);
+    for (const n of o) {
+      const e = c.find((x) => x.midi === n.midi && Math.abs(x.time - c[0].time - (n.time - o[0].time)) < 0.002);
+      expect(e, `nota ${n.midi} em ${n.time.toFixed(3)} s`).toBeTruthy();
+      expect(Math.abs(e!.dur - n.dur)).toBeLessThan(0.002);
+    }
+  });
+
+  it('partitura legível: swing escrito reto e o mesmo ritmo em todos os compassos', () => {
+    const { m } = handPlayed();
+    const s = importMidi(toBuffer(m), 'cos.mid');
+    expect(s.importReport?.swing).toBe(true);
+    const ev = buildEvents(s).filter((e) => e.hand === 'L');
+    const bar = (i: number) =>
+      ev
+        .filter((e) => e.measure === i)
+        .map((e) => `${e.midi}@${(e.t - s.measures[i].start) / PPQ}`)
+        .join(' ');
+    expect(bar(0)).toBe('43@0 46@0.5 50@1 55@1.5 55@2.5 53@3 50@3.5');
+    for (let i = 1; i < 16; i++) expect(bar(i), `compasso ${i + 1}`).toBe(bar(0));
+    expect(s.notes.some((n) => n.tuplet)).toBe(false);
+  });
+
+  it('tocado ao vivo sem swing: colcheias retas, sem tercinas inventadas', () => {
+    const { m } = handPlayed({ swing: 0.5, real: 100, file: 100 });
+    const s = importMidi(toBuffer(m), 'reto.mid');
+    expect(s.importReport?.swing).toBeUndefined();
+    expect(s.importReport?.tempoFix).toBeUndefined();
+    expect(s.notes.some((n) => n.tuplet)).toBe(false);
+    const l0 = buildEvents(s)
+      .filter((e) => e.hand === 'L' && e.measure === 3)
+      .map((e) => (e.t - s.measures[3].start) / PPQ);
+    expect(l0).toEqual([0, 0.5, 1, 1.5, 2.5, 3, 3.5]);
+  });
+
+  it('trilha-guia quase muda não entra na sugestão (nem vira a mão direita)', () => {
+    const m = new Midi();
+    const piano = m.addTrack();
+    const guide = m.addTrack();
+    for (let i = 0; i < 32; i++) piano.addNote({ midi: 43 + (i % 12), ticks: i * 240, durationTicks: 200, velocity: 0.6 });
+    for (let i = 0; i < 8; i++) for (const k of [62, 58, 55]) guide.addNote({ midi: k, ticks: i * 1920, durationTicks: 300, velocity: 2 / 127 });
+    const infos = midiTracks(m);
+    expect(infos[1].quiet).toBe(true);
+    expect(suggestTracks(infos)).toEqual([{ index: 0, hand: 'auto' }]);
   });
 });

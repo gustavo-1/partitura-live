@@ -348,10 +348,12 @@ export class PracticeEngine {
       if (e.t < this.startTick || e.t >= this.endTick || e.dup) continue;
       if (e.t <= this.scheduledUntil || e.t > horizon) continue;
       if (!playAll && this.opts.hands.includes(e.hand)) continue;
-      const when = toCtx(e.t);
       // ficou para trás (quadro muito lento): pular é melhor do que tocar tudo de uma vez
-      if (when < ctxNow - 0.03) continue;
-      const dur = this.secAt(e.t + (e.sd ?? e.d)) - this.secAt(e.t);
+      if (toCtx(e.t) < ctxNow - 0.03) continue;
+      // a nota soa onde soava no arquivo (interpretação), que pode ser um pouco antes ou depois da escrita
+      const s0 = e.st ?? e.t;
+      const when = Math.max(ctxNow, toCtx(s0));
+      const dur = this.secAt(s0 + (e.sd ?? e.d)) - this.secAt(s0);
       const vel = e.vel !== undefined ? 0.25 + 0.75 * e.vel : 0.7;
       this.scheduled.push({ v: playNote(e.midi, when, dur * (e.sd ? 1 : 0.95), vel), at: when });
       mic.ignoreNotes([e.midi], when + dur + 0.3);
@@ -472,7 +474,8 @@ export class PracticeEngine {
     if (this.opts.playOtherHand) {
       for (const ev of this.events) {
         if (ev.t === step.t && !this.opts.hands.includes(ev.hand) && !ev.dup) {
-          playNote(ev.midi, undefined, Math.min(1.5, this.secAt(ev.t + (ev.sd ?? ev.d)) - this.secAt(ev.t)), ev.vel !== undefined ? 0.2 + 0.6 * ev.vel : 0.6);
+          const s0 = ev.st ?? ev.t;
+          playNote(ev.midi, undefined, Math.min(1.5, this.secAt(s0 + (ev.sd ?? ev.d)) - this.secAt(s0)), ev.vel !== undefined ? 0.2 + 0.6 * ev.vel : 0.6);
           mic.ignoreNotes([ev.midi], now() + 1.2);
         }
       }
@@ -492,11 +495,13 @@ export class PracticeEngine {
     let best: PlayEvent | null = null;
     let bestD = Infinity;
     for (const step of this.steps) {
-      if (step.t < inputTick - win) continue;
-      if (step.t > inputTick + win) break;
+      // margem: a nota pode soar um pouco antes/depois de onde está escrita
+      if (step.t < inputTick - win - PPQ / 4) continue;
+      if (step.t > inputTick + win + PPQ / 4) break;
       for (const ev of step.events) {
         if (ev.midi !== e.midi || this.hitEvents.has(ev)) continue;
-        const d = Math.abs(ev.t - inputTick);
+        const d = Math.abs((ev.st ?? ev.t) - inputTick);
+        if (d > win) continue;
         if (d < bestD) {
           bestD = d;
           best = ev;
@@ -517,7 +522,7 @@ export class PracticeEngine {
       this.stats.hits++;
       this.stats.streak++;
       this.stats.bestStreak = Math.max(this.stats.bestStreak, this.stats.streak);
-      const dev = (inputTick - best.t) / tps;
+      const dev = (inputTick - (best.st ?? best.t)) / tps;
       this.stats.timing.push(dev);
       this.recentOk.push({ midi: e.midi, time: e.time });
       if (this.recentOk.length > 12) this.recentOk.shift();
@@ -542,7 +547,8 @@ export class PracticeEngine {
     const beatSec = 60 / this.qpm;
     const win = Math.max(0.16, Math.min(0.32, 0.45 * beatSec)) * tps;
     let changed = false;
-    while (this.evalIndex < this.steps.length && this.steps[this.evalIndex].t + win < this.tick) {
+    const lastSound = (st: PracticeStep) => Math.max(st.t, ...st.events.map((e) => e.st ?? e.t));
+    while (this.evalIndex < this.steps.length && lastSound(this.steps[this.evalIndex]) + win < this.tick) {
       const step = this.steps[this.evalIndex];
       for (const ev of step.events) {
         if (!this.hitEvents.has(ev)) {

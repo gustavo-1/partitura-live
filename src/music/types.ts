@@ -32,8 +32,10 @@ export interface NoteEl {
   hidden?: boolean; // pausa invisível (preenchimento de voz secundária)
   /** intensidade de cada nota do acorde (0..1), quando a música importada traz essa informação */
   vel?: number[];
-  /** duração que soa no arquivo original (ticks), quando difere da escrita; só no primeiro pedaço ligado */
+  /** duração que soa no arquivo original (ticks, a partir do ataque real); só no primeiro pedaço ligado */
   sdur?: number[];
+  /** ataque real no arquivo menos o ataque escrito (ticks): o som segue a interpretação, a partitura fica legível */
+  sofs?: number[];
 }
 
 export interface Measure {
@@ -86,10 +88,18 @@ export interface SongOriginal {
 
 export interface ImportReport {
   notes: number;
-  /** notas no mesmo instante do arquivo (até 10 ms de diferença no andamento original) */
+  /** notas que o app toca no mesmo instante do arquivo (até 10 ms) */
   exact: number;
-  /** maior deslocamento de uma nota (ms) */
+  /** maior deslocamento do som de uma nota (ms) */
   maxShiftMs: number;
+  /** notas escritas exatamente onde soam (o resto foi alinhado às figuras da partitura) */
+  gridExact?: number;
+  /** maior diferença entre onde a nota soa e onde está escrita (ms) */
+  gridMaxMs?: number;
+  /** o arquivo dizia um andamento, mas as notas seguiam outro: a grade foi refeita */
+  tempoFix?: { file: number; real: number };
+  /** colcheias com swing (escritas retas; o som mantém o balanço) */
+  swing?: boolean;
   /** notas repetidas iguais juntadas (mesma tecla no mesmo instante) */
   merged: number;
   tempoChanges: number;
@@ -99,7 +109,7 @@ export interface ImportReport {
 }
 
 /** Versão atual dos importadores de MIDI/MusicXML (sobe quando a conversão melhora). */
-export const IMPORT_VERSION = 3;
+export const IMPORT_VERSION = 4;
 
 export type Hand = 'R' | 'L';
 
@@ -116,7 +126,9 @@ export interface PlayEvent {
   measure: number;
   /** intensidade (0..1) */
   vel?: number;
-  /** quanto a nota soa de fato, com o pedal (ticks); só para o som */
+  /** onde a nota soa de fato (ticks), quando difere da escrita (interpretação "ao vivo") */
+  st?: number;
+  /** quanto a nota soa de fato a partir de onde soa, com o pedal (ticks); só para o som */
   sd?: number;
   /** mesma tecla, mesmo instante de outra nota (uníssono entre vozes): não toca duas vezes */
   dup?: boolean;

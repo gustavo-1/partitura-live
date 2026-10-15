@@ -265,7 +265,8 @@ function PlayerInner({ song, query }: { song: Song; query: URLSearchParams }) {
       .map((e) => ({
         id: `${e.elId}:${e.keyIndex}`,
         midi: e.midi,
-        start: engine.secAt(e.t),
+        // a cascata mostra a nota onde ela soa (interpretação do arquivo), com o tamanho da figura escrita
+        start: engine.secAt(e.st ?? e.t),
         dur: engine.secAt(e.t + e.d) - engine.secAt(e.t),
         hand: e.hand,
         finger: e.finger,

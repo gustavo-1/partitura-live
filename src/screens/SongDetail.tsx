@@ -53,7 +53,7 @@ function SongDetailInner({ song, onReplace }: { song: Song; onReplace: (s: Song)
   const [tLo, tHi] = tempoRange(song);
   // músicas importadas por você (no aparelho/conta) podem ser reconvertidas a partir do arquivo original
   const [mine, setMine] = useState<{ fileName: string } | null>(null);
-  const [retrack, setRetrack] = useState(false);
+  const [retrack, setRetrack] = useState<false | 'saved' | 'fresh'>(false);
   const [convNotice, setConvNotice] = useState<string | null>(null);
   useEffect(() => {
     if (song.source !== 'import') return;
@@ -62,11 +62,17 @@ function SongDetailInner({ song, onReplace }: { song: Song; onReplace: (s: Song)
       setMine(r ? { fileName: r.fileName } : null);
     });
   }, [song.id, song.source]);
-  const reconvert = async (tracks: TrackChoice[]) => {
+  const reconvert = async (tracks?: TrackChoice[]) => {
     setRetrack(false);
     const o = song.original!;
     const { importMidi } = await import('../music/midiImport');
-    const fresh = importMidi(b64ToBuffer(o.data), o.name, { tracks });
+    let fresh: Song;
+    try {
+      fresh = importMidi(b64ToBuffer(o.data), o.name, { tracks: tracks?.length ? tracks : undefined });
+    } catch (e) {
+      setConvNotice(e instanceof Error ? e.message : String(e));
+      return;
+    }
     // mesma música (mesmo id): o progresso e os links continuam valendo
     const next: Song = { ...fresh, id: song.id, title: song.title };
     await saveImported(next, mine?.fileName ?? o.name);
@@ -90,11 +96,28 @@ function SongDetailInner({ song, onReplace }: { song: Song; onReplace: (s: Song)
       {song.source === 'import' && mine && (song.importVersion ?? 1) < IMPORT_VERSION && (
         <div className="banner warn small" style={{ marginBottom: 14 }}>
           <Icon name="info" size={18} />
-          <div>
-            Esta música foi importada com uma versão anterior do conversor. Importe o mesmo arquivo de novo em <b>Músicas</b> para ganhar a
-            escolha de trilhas (sem instrumentos se atropelando no piano), as mudanças de andamento e de compasso do arquivo e a duração real
-            de cada nota — a versão antiga é substituída e o seu progresso continua.
-          </div>
+          {song.original?.kind === 'midi' ? (
+            <div>
+              O conversor melhorou: o som segue o arquivo nota por nota, a grade é refeita quando o arquivo não segue o próprio andamento e o
+              swing fica escrito de forma consistente.
+              <div style={{ marginTop: 8 }}>
+                <button className="btn sm primary" onClick={async () => {
+                    // vários instrumentos: confirma as trilhas (a sugestão nova ignora trilhas-guia mudas)
+                    const [{ Midi }, { midiTracks, needsTrackChoice }] = await Promise.all([import('@tonejs/midi'), import('../music/midiImport')]);
+                    if (needsTrackChoice(midiTracks(new Midi(b64ToBuffer(song.original!.data))))) setRetrack('fresh');
+                    else void reconvert(undefined);
+                  }}>
+                  Refazer com o conversor novo
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div>
+              Esta música foi importada com uma versão anterior do conversor. Importe o mesmo arquivo de novo em <b>Músicas</b> para ganhar a
+              escolha de trilhas, as mudanças de andamento e de compasso, o som nota por nota como no arquivo e a grade corrigida — a versão
+              antiga é substituída e o seu progresso continua.
+            </div>
+          )}
         </div>
       )}
 
@@ -149,7 +172,7 @@ function SongDetailInner({ song, onReplace }: { song: Song; onReplace: (s: Song)
             <CompareButtons song={song} />
             {mine && song.original?.kind === 'midi' && (
               <div>
-                <button className="btn sm ghost" onClick={() => setRetrack(true)}>
+                <button className="btn sm ghost" onClick={() => setRetrack('saved')}>
                   <Icon name="sliders" /> Trilhas e mãos…
                 </button>
               </div>
@@ -161,7 +184,7 @@ function SongDetailInner({ song, onReplace }: { song: Song; onReplace: (s: Song)
               <TrackPicker
                 fileName={song.original.name}
                 data={b64ToBuffer(song.original.data)}
-                initial={song.original.tracks}
+                initial={retrack === 'saved' ? song.original.tracks : undefined}
                 confirmLabel="Refazer partitura"
                 onCancel={() => setRetrack(false)}
                 onConfirm={(t) => void reconvert(t)}

@@ -7,9 +7,10 @@ import { Icon } from './Icon';
 
 const n = (x: number) => x.toLocaleString('pt-BR');
 
-/** Resumo honesto da conversão: quantas notas ficaram exatamente onde estavam no arquivo. */
+/** Resumo honesto da conversão: o som segue o arquivo? e a partitura, quanto precisou arredondar? */
 export function FidelityLine({ report: r }: { report: ImportReport }) {
   const pct = r.notes ? r.exact / r.notes : 1;
+  const grid = r.gridExact !== undefined && r.notes ? r.gridExact / r.notes : 1;
   const parts: string[] = [];
   if (r.tempoChanges) parts.push(`${r.tempoChanges} ${r.tempoChanges === 1 ? 'mudança' : 'mudanças'} de andamento`);
   if (r.timeSigChanges) parts.push(`${r.timeSigChanges} de compasso`);
@@ -17,11 +18,19 @@ export function FidelityLine({ report: r }: { report: ImportReport }) {
   return (
     <div className={'fidelity ' + (pct >= 0.98 ? 'good' : pct >= 0.85 ? 'mid' : 'low')}>
       <b>
-        {n(r.notes)} notas · {pct >= 0.995 ? 'todas' : `${Math.floor(pct * 100)}%`} no instante exato do arquivo
+        {n(r.notes)} notas · {pct >= 0.995 ? 'o som segue o arquivo nota por nota' : `${Math.floor(pct * 100)}% no instante exato do arquivo`}
       </b>
-      {pct < 0.995 && (
+      {pct < 0.995 && <span className="tiny">Maior deslocamento do som: {r.maxShiftMs} ms.</span>}
+      {r.tempoFix && (
         <span className="tiny">
-          Maior deslocamento: {r.maxShiftMs} ms. Notas tocadas “ao vivo” (fora da grade) foram alinhadas às figuras da partitura.
+          O arquivo diz {r.tempoFix.file} bpm, mas a música foi tocada a ~{r.tempoFix.real} bpm: os tempos e compassos da partitura foram refeitos
+          para seguir a música.
+        </span>
+      )}
+      {r.swing && <span className="tiny">Colcheias com swing: escritas retas e tocadas “balançadas”, como no original.</span>}
+      {grid < 0.98 && r.gridMaxMs !== undefined && (
+        <span className="tiny">
+          Tocado “ao vivo”: na partitura, cada nota foi escrita na figura mais próxima (até {r.gridMaxMs} ms de diferença) — o som não muda.
         </span>
       )}
       {parts.length > 0 && <span className="tiny">Seguindo {parts.join(', ')}.</span>}

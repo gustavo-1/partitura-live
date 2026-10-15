@@ -212,6 +212,13 @@ export function renderScore(container: HTMLElement, song: Song, opts: ScoreOptio
       const startX = Math.max(...staves.map((st) => st.getNoteStartX()));
       staves.forEach((st) => st.setNoteStartX(startX));
       staves.forEach((st) => st.setContext(ctx).draw());
+      // música com swing: as colcheias estão escritas retas e se tocam "balançadas"
+      if (m.index === 0 && song.importReport?.swing && !opts.bare) {
+        ctx.save();
+        ctx.setFont('Arial', 12, 'bold');
+        ctx.fillText('Swing', staves[0].getNoteStartX(), staves[0].getYForTopText(1));
+        ctx.restore();
+      }
       if (first) {
         sysBox.staves = staves;
         sysBox.staveYs = staves.map((st) => st.getYForLine(0) * scale);

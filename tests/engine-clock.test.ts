@@ -79,6 +79,31 @@ describe('relógio da reprodução', () => {
     }
   });
 
+  it('modo ouvir toca a interpretação do arquivo (não a grade da partitura)', () => {
+    // arquivo "tocado à mão": diz 130 bpm, notas a ~125 bpm com pequenas imprecisões
+    const m = new Midi();
+    m.header.tempos.push({ ticks: 0, bpm: 130 });
+    m.header.update();
+    const tr = m.addTrack();
+    let x = 3;
+    const r = () => ((x = (x * 1664525 + 1013904223) % 4294967296) / 4294967296);
+    for (let i = 0; i < 64; i++) {
+      const sec = 0.05 + (i * 0.5 * 60) / 125 + (r() - 0.5) * 0.03;
+      tr.addNote({ midi: [43, 50, 55, 62][i % 4] + (i % 8 < 4 ? 0 : 2), ticks: Math.round((sec * 130 * 480) / 60), durationTicks: 200, velocity: 0.5 });
+    }
+    const song = importMidi(midiBuf(m), 'mao.mid');
+    expect(song.importReport?.tempoFix).toBeTruthy();
+    const engine = new PracticeEngine(song, { ...opts });
+    engine.start();
+    run(engine, 30, (i) => (i % 15 === 14 ? 120 : 16));
+    const sounding = played.filter((p) => p.stopped === undefined);
+    expect(sounding.length).toBe(64);
+    sounding.forEach((p, i) => {
+      const ideal = tr.notes[i].time - tr.notes[0].time;
+      expect(Math.abs(p.when - sounding[0].when - ideal) * 1000, `nota ${i}`).toBeLessThan(1);
+    });
+  });
+
   it('metrônomo acompanha mudanças de compasso (acento em cada barra)', () => {
     const m = new Midi();
     m.header.tempos.push({ ticks: 0, bpm: 120 });

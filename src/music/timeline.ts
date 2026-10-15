@@ -34,8 +34,10 @@ export function buildEvents(song: Song): PlayEvent[] {
           curKi = nk;
           j++;
         }
-        // som: duração real do arquivo (quando a importação a guardou) + pedal
+        // som: onde e quanto a nota soa no arquivo (quando a importação guardou) + pedal
         const base = n.sdur?.[ki] ?? d;
+        const st = n.sofs?.[ki] ? n.t + n.sofs[ki] : undefined;
+        const s0 = st ?? n.t;
         events.push({
           midi: k.midi,
           t: n.t,
@@ -47,7 +49,8 @@ export function buildEvents(song: Song): PlayEvent[] {
           finger: n.fingers?.[ki],
           measure: n.measure,
           vel: n.vel?.[ki],
-          sd: song.pedal?.length ? pedalEnd(song.pedal, n.t, n.t + base) - n.t : n.sdur ? base : undefined,
+          st,
+          sd: song.pedal?.length ? pedalEnd(song.pedal, s0, s0 + base) - s0 : n.sdur ? base : undefined,
         });
       });
     });
@@ -63,17 +66,23 @@ export function buildEvents(song: Song): PlayEvent[] {
  */
 function restrike(events: PlayEvent[]) {
   const last = new Map<number, PlayEvent>();
-  for (const e of events) {
+  const at = (e: PlayEvent) => e.st ?? e.t;
+  for (const e of [...events].sort((a, b) => at(a) - at(b) || a.midi - b.midi)) {
     const prev = last.get(e.midi);
     if (prev) {
-      if (prev.t === e.t) e.dup = true;
+      if (prev.t === e.t || Math.abs(at(prev) - at(e)) < 1) e.dup = true;
       else {
-        const end = prev.t + (prev.sd ?? prev.d);
-        if (end > e.t) prev.sd = e.t - prev.t;
+        const end = at(prev) + (prev.sd ?? prev.d);
+        if (end > at(e)) prev.sd = at(e) - at(prev);
       }
     }
     if (!e.dup) last.set(e.midi, e);
   }
+}
+
+/** Onde a nota soa (ticks): a interpretação do arquivo, se houver; senão onde está escrita. */
+export function soundAt(e: PlayEvent): number {
+  return e.st ?? e.t;
 }
 
 // ---- andamento variável ----
@@ -197,11 +206,12 @@ export function songSounds(song: Song): { midi: number; time: number; dur: numbe
   return buildEvents(song)
     .filter((e) => !e.dup)
     .map((e) => {
-      const time = tickToSecs(segs, e.t);
+      const s0 = e.st ?? e.t;
+      const time = tickToSecs(segs, s0);
       return {
         midi: e.midi,
         time,
-        dur: (tickToSecs(segs, e.t + (e.sd ?? e.d)) - time) * (e.sd ? 1 : 0.95),
+        dur: (tickToSecs(segs, s0 + (e.sd ?? e.d)) - time) * (e.sd ? 1 : 0.95),
         vel: e.vel !== undefined ? 0.25 + 0.75 * e.vel : 0.7,
       };
     });
