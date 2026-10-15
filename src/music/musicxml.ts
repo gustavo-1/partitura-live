@@ -3,7 +3,7 @@ import { resolveTies } from './notation';
 import { estimateLevel } from './build';
 import { slug } from './midiImport';
 import { durTicks, makePitch, ticksToDurations } from './theory';
-import { PPQ, type Clef, type Hand, type Measure, type NoteEl, type Pitch, type Song, type Step } from './types';
+import { IMPORT_VERSION, PPQ, type Clef, type Hand, type Measure, type NoteEl, type Pitch, type Song, type Step } from './types';
 
 const TYPE_TO_DUR: Record<string, string> = {
   whole: 'w',
@@ -48,6 +48,87 @@ function directChildren(el: Element, tag: string): Element[] {
   return Array.from(el.children).filter((c) => c.tagName === tag);
 }
 
+/** Dinâmicas escritas -> intensidade (0..1). */
+const DYN: Record<string, number> = { ppp: 0.2, pp: 0.28, p: 0.38, mp: 0.5, mf: 0.6, f: 0.72, ff: 0.84, fff: 0.95, sf: 0.85, sfz: 0.85, fz: 0.85 };
+
+/** Figura de referência do metrônomo -> semínimas. */
+function beatUnitQuarters(unit: string | null, dotted: boolean): number {
+  const base: Record<string, number> = { whole: 4, half: 2, quarter: 1, eighth: 0.5, '16th': 0.25 };
+  const q = base[unit ?? 'quarter'] ?? 1;
+  return dotted ? q * 1.5 : q;
+}
+
+/**
+ * Ordem de execução dos compassos com ritornelos e casas de 1ª/2ª vez
+ * (D.C., D.S. e coda não são seguidos).
+ */
+export function playOrder(measures: Element[]): number[] {
+  const n = measures.length;
+  const forward: boolean[] = [];
+  const backward: number[] = []; // vezes (0 = sem ritornelo)
+  const endings: (number[] | null)[] = [];
+  let open: number[] | null = null;
+  measures.forEach((m, i) => {
+    let fwd = false;
+    let back = 0;
+    let startNums: number[] | null = null;
+    let stop = false;
+    for (const b of directChildren(m, 'barline')) {
+      const r = b.querySelector('repeat');
+      if (r?.getAttribute('direction') === 'forward') fwd = true;
+      if (r?.getAttribute('direction') === 'backward') back = Math.max(2, Number(r.getAttribute('times')) || 2);
+      const e = b.querySelector('ending');
+      if (e) {
+        const type = e.getAttribute('type');
+        const nums = (e.getAttribute('number') ?? '1')
+          .split(/[,\s]+/)
+          .map(Number)
+          .filter((x) => x > 0);
+        if (type === 'start') startNums = nums.length ? nums : [1];
+        if (type === 'stop' || type === 'discontinue') stop = true;
+      }
+    }
+    if (startNums) open = startNums;
+    endings[i] = open;
+    if (stop) open = null;
+    forward[i] = fwd;
+    backward[i] = back;
+  });
+  const order: number[] = [];
+  let i = 0;
+  let start = 0;
+  let pass = 1;
+  let jumped = false;
+  const done = new Map<number, number>();
+  while (i < n && order.length < n * 8) {
+    if (forward[i] && !(jumped && i === start)) {
+      start = i;
+      pass = 1;
+    }
+    jumped = false;
+    const ends = endings[i];
+    const plays = !ends || ends.includes(pass);
+    if (plays) order.push(i);
+    if (plays && backward[i]) {
+      const d = done.get(i) ?? 1;
+      if (d < backward[i]) {
+        done.set(i, d + 1);
+        pass = d + 1;
+        i = start;
+        jumped = true;
+        continue;
+      }
+      done.delete(i);
+      if (!ends) {
+        start = i + 1;
+        pass = 1;
+      }
+    }
+    i++;
+  }
+  return order;
+}
+
 interface RawNote {
   staff: number;
   voice: string;
@@ -63,6 +144,7 @@ interface RawNote {
   measure: number;
   fullRest: boolean;
   hidden: boolean;
+  vel?: number;
 }
 
 /** Converte MusicXML (score-partwise) no modelo interno. */
@@ -102,8 +184,21 @@ export function importMusicXml(xml: string, fileName: string): Song {
   const measures: Measure[] = [];
   let mStart = 0;
   let lastNote: RawNote | null = null;
+  let vel: number | undefined;
+  const pedal: [number, number][] = [];
+  let pedalDown: number | null = null;
+  const pedalAt = (t: number, type: string | null) => {
+    if ((type === 'stop' || type === 'change') && pedalDown !== null) {
+      if (t > pedalDown) pedal.push([pedalDown, t]);
+      pedalDown = null;
+    }
+    if (type === 'start' || type === 'change') pedalDown = t;
+  };
 
-  directChildren(part, 'measure').forEach((m, mi) => {
+  // ritornelos e casas de 1ª/2ª vez: a música é "desdobrada" na ordem em que se toca
+  const allMeasures = directChildren(part, 'measure');
+  playOrder(allMeasures).forEach((srcIndex, mi) => {
+    const m = allMeasures[srcIndex];
     let cursor = 0;
     let maxCursor = 0;
     let keyChange = mi === 0;
@@ -138,8 +233,19 @@ export function importMusicXml(xml: string, fileName: string): Song {
           if (t && !tempo) tempo = Math.round(Number(t));
           if (!tempo) {
             const pm = num(el, 'metronome > per-minute', 0);
-            if (pm) tempo = Math.round(pm);
+            // o metrônomo pode ser em mínima, semínima pontuada etc.: converte para semínimas
+            if (pm) tempo = Math.round(pm * beatUnitQuarters(txt(el, 'metronome > beat-unit'), !!el.querySelector('metronome > beat-unit-dot')));
           }
+          const dynAttr = s?.getAttribute('dynamics');
+          if (dynAttr && Number(dynAttr) > 0) vel = Math.max(0.15, Math.min(1, (Number(dynAttr) / 100) * 0.72));
+          else {
+            const dyn = el.querySelector('direction-type > dynamics > *');
+            if (dyn && DYN[dyn.tagName]) vel = DYN[dyn.tagName];
+          }
+          const pd = el.querySelector('direction-type > pedal');
+          if (pd) pedalAt(mStart + cursor, pd.getAttribute('type'));
+          const damper = s?.getAttribute('damper-pedal');
+          if (damper) pedalAt(mStart + cursor, damper === 'no' ? 'stop' : 'start');
           break;
         }
         case 'backup':
@@ -185,6 +291,7 @@ export function importMusicXml(xml: string, fileName: string): Song {
             measure: mi,
             fullRest: !!restEl && restEl.getAttribute('measure') === 'yes',
             hidden: el.getAttribute('print-object') === 'no',
+            vel: el.getAttribute('dynamics') ? Math.max(0.15, Math.min(1, (Number(el.getAttribute('dynamics')) / 100) * 0.72)) : vel,
           };
           raw.push(rn);
           if (!isChord) {
@@ -202,6 +309,7 @@ export function importMusicXml(xml: string, fileName: string): Song {
     measures.push({ index: mi, start: mStart, length, timeSig, keySig: fifths, timeSigChange: timeChange, keySigChange: keyChange });
     mStart += length;
   });
+  if (pedalDown !== null) pedal.push([pedalDown, mStart]);
 
   const nStaves = Math.max(1, clefs.length, ...raw.map((r) => r.staff + 1));
   for (let i = 0; i < nStaves; i++) if (!clefs[i]) clefs[i] = i === 0 ? 'treble' : 'bass';
@@ -225,6 +333,7 @@ export function importMusicXml(xml: string, fileName: string): Song {
     const existing = byKey.get(key);
     if (existing && r.pitch && existing.keys.length) {
       existing.keys.push(r.pitch);
+      if (existing.vel) existing.vel.push(r.vel ?? existing.vel[0]);
       existing.fingers = existing.fingers ? [...existing.fingers, r.finger] : r.finger ? [...existing.keys.slice(0, -1).map(() => undefined), r.finger] : undefined;
       existing.tieStart = existing.tieStart || r.tie ? [...(existing.tieStart ?? existing.keys.slice(0, -1).map(() => false)), r.tie] : undefined;
       continue;
@@ -256,6 +365,7 @@ export function importMusicXml(xml: string, fileName: string): Song {
       fingers: r.finger ? [r.finger] : undefined,
       tieStart: r.tie ? [true] : undefined,
       tuplet: r.tuplet,
+      vel: r.pitch && r.vel !== undefined ? [r.vel] : undefined,
       measure: r.measure,
       fullRest: !r.pitch && (r.fullRest || r.dur >= measures[r.measure].length) ? true : undefined,
       hidden: r.hidden && !r.pitch ? true : undefined,
@@ -270,6 +380,7 @@ export function importMusicXml(xml: string, fileName: string): Song {
     n.keys = idx.map((i) => n.keys[i]);
     if (n.fingers) n.fingers = idx.map((i) => n.fingers![i]);
     if (n.tieStart) n.tieStart = idx.map((i) => n.tieStart![i] ?? false);
+    if (n.vel) n.vel = idx.map((i) => n.vel![i] ?? n.vel![0]);
   }
   fillVoiceGaps(notes, measures, () => id++);
 
@@ -288,6 +399,8 @@ export function importMusicXml(xml: string, fileName: string): Song {
     measures,
     notes,
     staffHands,
+    pedal: pedal.length ? pedal : undefined,
+    importVersion: IMPORT_VERSION,
   };
   song.level = estimateLevel(notes, song.tempo, nStaves);
   resolveTies(song);

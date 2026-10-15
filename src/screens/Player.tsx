@@ -263,6 +263,14 @@ function PlayerInner({ song, query }: { song: Song; query: URLSearchParams }) {
     setResult(null);
   };
 
+  // andamento de 5 em 5 bpm (o fator é relativo ao andamento da música)
+  const setBpm = (delta: number) => {
+    const cur = Math.round(song.tempo * opts.tempoFactor);
+    const target = Math.round((cur + delta) / 5) * 5 || cur + delta;
+    const f = Math.max(0.3, Math.min(1.5, target / song.tempo));
+    engine.setOptions({ tempoFactor: Math.round(f * 1000) / 1000 });
+  };
+
   const playPause = async () => {
     await resumeAudio();
     if (engine.status === 'playing') engine.pause();
@@ -470,13 +478,13 @@ function PlayerInner({ song, query }: { song: Song; query: URLSearchParams }) {
             />
           )}
           <div className="row nowrap" style={{ gap: 4 }}>
-            <button className="btn sm icon" aria-label="Mais devagar" onClick={() => engine.setOptions({ tempoFactor: Math.max(0.3, Math.round((opts.tempoFactor - 0.1) * 10) / 10) })}>
+            <button className="btn sm icon" aria-label="5 bpm mais devagar" onClick={() => setBpm(-5)}>
               −
             </button>
             <span className="chip" title="Andamento">
               <Icon name="metronome" size={14} /> {Math.round(song.tempo * opts.tempoFactor)} bpm
             </span>
-            <button className="btn sm icon" aria-label="Mais rápido" onClick={() => engine.setOptions({ tempoFactor: Math.min(1.5, Math.round((opts.tempoFactor + 0.1) * 10) / 10) })}>
+            <button className="btn sm icon" aria-label="5 bpm mais rápido" onClick={() => setBpm(5)}>
               +
             </button>
           </div>
@@ -510,14 +518,16 @@ function PlayerInner({ song, query }: { song: Song; query: URLSearchParams }) {
 
       <Sheet open={showOpts} onClose={() => setShowOpts(false)} title="Opções de prática">
         <div className="field">
-          <span className="label">Andamento: {Math.round(opts.tempoFactor * 100)}% ({Math.round(song.tempo * opts.tempoFactor)} bpm)</span>
+          <span className="label">
+            Andamento: {Math.round(song.tempo * opts.tempoFactor)} bpm ({Math.round(opts.tempoFactor * 100)}% do original, {song.tempo} bpm)
+          </span>
           <input
             type="range"
-            min={0.3}
-            max={1.5}
-            step={0.05}
-            value={opts.tempoFactor}
-            onChange={(e) => engine.setOptions({ tempoFactor: Number(e.target.value) })}
+            min={Math.max(20, Math.round(song.tempo * 0.3))}
+            max={Math.round(song.tempo * 1.5)}
+            step={1}
+            value={Math.round(song.tempo * opts.tempoFactor)}
+            onChange={(e) => engine.setOptions({ tempoFactor: Math.round((Number(e.target.value) / song.tempo) * 1000) / 1000 })}
           />
         </div>
         <Toggle label="Metrônomo" hint="Nos modos 'No tempo' e 'Ouvir'" checked={opts.metronome} onChange={(v) => engine.setOptions({ metronome: v })} />

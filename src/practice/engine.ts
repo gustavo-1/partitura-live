@@ -2,7 +2,7 @@ import { now } from '../audio/context';
 import type { NoteEvent } from '../audio/input';
 import { mic } from '../audio/mic';
 import { click } from '../audio/metronome';
-import { playNote } from '../audio/piano';
+import { playNote, type Voice } from '../audio/piano';
 import { isHarmonicOf } from '../audio/detector';
 import { beatTicks, measureTicks, midiName, type NamingStyle } from '../music/theory';
 import { buildEvents, buildSteps, songEnd } from '../music/timeline';
@@ -75,6 +75,13 @@ export class PracticeEngine {
 
   private listeners = new Set<() => void>();
   private lastCtx = 0;
+  /**
+   * Âncora do relógio nos modos "no tempo" e "ouvir": a posição vem do relógio de áudio,
+   * então um quadro lento (celular ocupado desenhando) não atrasa a música.
+   */
+  private anchor: { ctx: number; tick: number; tps: number } | null = null;
+  /** sons já agendados para o futuro (cancelados ao pausar, mudar andamento etc.) */
+  private scheduled: { v: Voice; at: number }[] = [];
   private startTick = 0;
   private endTick = 0;
   private hitEvents = new Set<PlayEvent>();
@@ -139,6 +146,9 @@ export class PracticeEngine {
   setOptions(p: Partial<EngineOptions>) {
     const structural = p.hands !== undefined || p.loop !== undefined || p.mode !== undefined;
     this.opts = { ...this.opts, ...p };
+    // o que já estava agendado seria tocado de novo (ou no andamento antigo)
+    this.cancelScheduled();
+    this.anchor = null;
     if (structural) {
       this.status = 'idle';
       this.rebuild();
@@ -160,7 +170,15 @@ export class PracticeEngine {
     this.tick = this.startTick - this.preRoll();
     this.scheduledUntil = this.tick;
     this.metroUntil = this.tick;
+    this.anchor = null;
     this.refreshMarks();
+  }
+
+  /** Silencia o que estava agendado para depois de agora. */
+  private cancelScheduled() {
+    const t = now();
+    for (const s of this.scheduled) if (s.at > t + 0.005) s.v.stop(t);
+    this.scheduled = [];
   }
 
   private preRoll(): number {
@@ -180,17 +198,24 @@ export class PracticeEngine {
   pause() {
     if (this.status !== 'playing') return;
     this.status = 'paused';
+    this.cancelScheduled();
+    // ao continuar, reagenda a partir de onde parou
+    this.scheduledUntil = this.tick;
+    this.metroUntil = this.tick;
+    this.anchor = null;
     this.emit();
   }
 
   restart() {
     this.status = 'idle';
+    this.cancelScheduled();
     this.resetPass();
     this.start();
   }
 
   stop() {
     this.status = 'idle';
+    this.cancelScheduled();
     this.resetPass();
     this.emit();
   }
@@ -199,14 +224,24 @@ export class PracticeEngine {
   update() {
     if (this.status !== 'playing') return;
     const t = now();
-    const dt = Math.min(0.1, Math.max(0, t - this.lastCtx));
-    this.lastCtx = t;
-    let next = this.tick + dt * this.ticksPerSec;
-
+    let next: number;
     if (this.opts.mode === 'wait') {
+      const dt = Math.min(0.1, Math.max(0, t - this.lastCtx));
+      next = this.tick + dt * this.ticksPerSec;
       const step = this.steps[this.pending];
       if (step && next > step.t) next = step.t; // espera o aluno
+      this.anchor = null;
+    } else {
+      const tps = this.ticksPerSec;
+      if (!this.anchor || this.anchor.tps !== tps) this.anchor = { ctx: t, tick: this.tick, tps };
+      next = this.anchor.tick + (t - this.anchor.ctx) * tps;
+      // aba em segundo plano por muito tempo: retoma de onde estava em vez de pular a música
+      if (next - this.tick > tps * 1.0) {
+        this.anchor = { ctx: t, tick: this.tick, tps };
+        next = this.tick;
+      }
     }
+    this.lastCtx = t;
     this.tick = next;
 
     this.scheduleAudio(t);
@@ -249,6 +284,7 @@ export class PracticeEngine {
       this.resetPass();
       this.feedback = fb;
       this.lastCtx = now();
+      this.anchor = null;
       this.emit();
       return;
     }
@@ -279,7 +315,8 @@ export class PracticeEngine {
 
   // ---- áudio agendado (metrônomo, acompanhamento, modo ouvir) ----
   private scheduleAudio(ctxNow: number) {
-    const ahead = 0.15 * this.ticksPerSec;
+    // margem maior nos modos com som contínuo: aguenta quadros lentos sem buracos
+    const ahead = (this.opts.mode === 'wait' ? 0.15 : 0.3) * this.ticksPerSec;
     const horizon = this.tick + ahead;
     const toCtx = (tk: number) => ctxNow + (tk - this.tick) / this.ticksPerSec;
     const blocked = this.opts.mode === 'wait';
@@ -298,7 +335,8 @@ export class PracticeEngine {
           const accent = inCount
             ? Math.round(b - (this.startTick - this.preRoll())) % mt === 0
             : this.song.measures.some((m) => m.start === Math.round(b));
-          click(toCtx(b), accent);
+          const at = toCtx(b);
+          this.scheduled.push({ v: click(at, accent), at });
         }
       }
       this.metroUntil = Math.max(this.metroUntil, horizon);
@@ -316,10 +354,14 @@ export class PracticeEngine {
       if (e.t <= this.scheduledUntil || e.t > horizon) continue;
       if (!playAll && this.opts.hands.includes(e.hand)) continue;
       const when = toCtx(e.t);
-      const dur = e.d / this.ticksPerSec;
-      playNote(e.midi, when, dur * 0.95, 0.7);
+      // ficou para trás (quadro muito lento): pular é melhor do que tocar tudo de uma vez
+      if (when < ctxNow - 0.03) continue;
+      const dur = (e.sd ?? e.d) / this.ticksPerSec;
+      const vel = e.vel !== undefined ? 0.25 + 0.75 * e.vel : 0.7;
+      this.scheduled.push({ v: playNote(e.midi, when, dur * (e.sd ? 1 : 0.95), vel), at: when });
       mic.ignoreNotes([e.midi], when + dur + 0.3);
     }
+    if (this.scheduled.length > 64) this.scheduled = this.scheduled.filter((x) => x.at > ctxNow - 0.05);
     this.scheduledUntil = horizon;
   }
 

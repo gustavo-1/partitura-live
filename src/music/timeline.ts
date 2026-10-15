@@ -44,12 +44,20 @@ export function buildEvents(song: Song): PlayEvent[] {
           keyIndex: ki,
           finger: n.fingers?.[ki],
           measure: n.measure,
+          vel: n.vel?.[ki],
+          sd: song.pedal?.length ? pedalEnd(song.pedal, n.t, n.t + d) - n.t : undefined,
         });
       });
     });
   }
   events.sort((a, b) => a.t - b.t || a.midi - b.midi);
   return events;
+}
+
+/** Com o pedal abaixado quando a tecla é solta, a nota continua soando até o pedal subir. */
+export function pedalEnd(pedal: [number, number][], start: number, end: number): number {
+  for (const [a, b] of pedal) if (a <= end && end < b && b > start) return b;
+  return end;
 }
 
 export function buildSteps(events: PlayEvent[], hands: Hand[]): PracticeStep[] {

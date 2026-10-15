@@ -80,15 +80,24 @@ export function Score({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [song, width, optsKey]);
 
-  // marcações (cores) nas notas
+  // marcações (cores) nas notas — só mexe nas que mudaram (partituras grandes têm milhares de notas)
+  const applied = useRef<{ layout: unknown; marks: Map<number, string> }>({ layout: null, marks: new Map() });
   useEffect(() => {
     if (!layout) return;
-    for (const box of layout.notes.values()) {
-      const g = box.group;
-      if (!g) continue;
-      const m = marks?.get(box.el.id);
+    const prev = applied.current.layout === layout ? applied.current.marks : null;
+    const next = new Map<number, string>(marks ? [...marks] : []);
+    const set = (id: number, m: string | undefined) => {
+      const g = layout.notes.get(id)?.group;
+      if (!g) return;
       for (const c of MARK_CLASSES) g.classList.toggle('mk-' + c, m === c);
+    };
+    if (!prev) {
+      for (const box of layout.notes.values()) set(box.el.id, next.get(box.el.id));
+    } else {
+      for (const [id, m] of next) if (prev.get(id) !== m) set(id, m);
+      for (const id of prev.keys()) if (!next.has(id)) set(id, undefined);
     }
+    applied.current = { layout, marks: next };
   }, [layout, marks]);
 
   // cursor

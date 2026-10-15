@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { getSong } from '../data/library';
-import type { Song } from '../music/types';
+import { IMPORT_VERSION, type Song } from '../music/types';
 import { studyPlan, stepUrl } from '../practice/plan';
 import { useStore } from '../lib/store';
 import { progress } from '../state/progress';
@@ -56,6 +56,16 @@ function SongDetailInner({ song }: { song: Song }) {
           <div className="muted small">{song.composer}</div>
         </div>
       </div>
+
+      {song.source === 'import' && (song.importVersion ?? 1) < IMPORT_VERSION && (
+        <div className="banner warn small" style={{ marginBottom: 14 }}>
+          <Icon name="info" size={18} />
+          <div>
+            Esta música foi importada antes da melhoria de conversão (notas longas, tercinas, pedal e intensidade). Para ouvi-la fiel ao
+            arquivo, remova-a em <b>Músicas → Suas músicas importadas</b> e importe o arquivo de novo.
+          </div>
+        </div>
+      )}
 
       <div className="card">
         <div className="row" style={{ marginBottom: 10 }}>

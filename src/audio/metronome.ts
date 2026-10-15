@@ -13,8 +13,9 @@ let noise: AudioBuffer | null = null;
  * O clique é um ruído filtrado (tipo "woodblock"), sem altura definida, para que
  * o detector de notas do microfone não o confunda com uma tecla.
  */
-export function click(when: number, accent = false): void {
-  if (volume <= 0) return;
+export function click(when: number, accent = false): { stop(at?: number): void } {
+  const none = { stop() {} };
+  if (volume <= 0) return none;
   const ctx = audioCtx();
   if (!noise) {
     const len = Math.floor(ctx.sampleRate * 0.04);
@@ -32,6 +33,15 @@ export function click(when: number, accent = false): void {
   g.gain.value = 1.6 * volume * (accent ? 1 : 0.65);
   src.connect(f).connect(g).connect(ctx.destination);
   src.start(when);
+  return {
+    stop(at = ctx.currentTime) {
+      try {
+        src.stop(at);
+      } catch {
+        /* já parado */
+      }
+    },
+  };
 }
 
 /** Metrônomo independente (para a tela de ferramentas e exercícios de ritmo). */

@@ -7,12 +7,50 @@ export interface RawChord {
   dur: number;
   pitches: Pitch[];
   fingers?: (number | undefined)[];
+  /** intensidade de cada nota (0..1) */
+  vels?: number[];
 }
 
 export interface RawStaff {
   clef: Clef;
   hand: Hand;
   chords: RawChord[];
+  /** pauta (padrão: a posição na lista) e voz dentro da pauta (padrão 0) */
+  staff?: number;
+  voice?: number;
+}
+
+const TRIP = PPQ / 3; // colcheia de tercina
+const isStraight = (v: number) => Math.abs(v - Math.round(v / (PPQ / 8)) * (PPQ / 8)) < 1;
+
+/** Divide um trecho em figuras escrevíveis; tempos com tercinas viram colcheias de tercina ligadas. */
+export function splitDur(t: number, len: number): { t: number; d: number; dur: string; dots: number; tuplet?: { actual: number; normal: number } }[] {
+  const out: { t: number; d: number; dur: string; dots: number; tuplet?: { actual: number; normal: number } }[] = [];
+  const end = t + len;
+  let x = t;
+  let guard = 0;
+  while (x < end - 1 && guard++ < 400) {
+    if (isStraight(x) && isStraight(end)) {
+      for (const p of ticksToDurations(end - x)) {
+        out.push({ t: x, d: p.ticks, dur: p.dur, dots: p.dots });
+        x += p.ticks;
+      }
+      break;
+    }
+    const beatEnd = (Math.floor((x + 1) / PPQ) + 1) * PPQ;
+    const segEnd = Math.min(end, beatEnd);
+    if (isStraight(x) && isStraight(segEnd)) {
+      for (const p of ticksToDurations(segEnd - x)) {
+        out.push({ t: x, d: p.ticks, dur: p.dur, dots: p.dots });
+        x += p.ticks;
+      }
+    } else {
+      const n = Math.max(1, Math.round((segEnd - x) / TRIP));
+      for (let k = 0; k < n; k++) out.push({ t: x + k * TRIP, d: TRIP, dur: '8', dots: 0, tuplet: { actual: 3, normal: 2 } });
+    }
+    x = segEnd;
+  }
+  return out;
 }
 
 export interface SongMeta {
@@ -33,13 +71,28 @@ export function songFromChords(meta: SongMeta, staves: RawStaff[]): Song {
   let end = 0;
   for (const s of staves) for (const c of s.chords) end = Math.max(end, c.start + c.dur);
   const nMeasures = Math.max(1, Math.ceil(end / mLen - 1e-6));
+  // pautas: várias vozes podem dividir a mesma pauta
+  const nStaves = Math.max(1, ...staves.map((s, i) => (s.staff ?? i) + 1));
+  const clefs: Clef[] = [];
+  const staffHands: Hand[] = [];
+  staves.forEach((s, i) => {
+    const k = s.staff ?? i;
+    clefs[k] ??= s.clef;
+    staffHands[k] ??= s.hand;
+  });
+  for (let i = 0; i < nStaves; i++) {
+    clefs[i] ??= i === 0 ? 'treble' : 'bass';
+    staffHands[i] ??= i === 0 ? 'R' : 'L';
+  }
   const measures: Measure[] = [];
   for (let i = 0; i < nMeasures; i++) {
     measures.push({ index: i, start: i * mLen, length: mLen, timeSig: meta.timeSig, keySig: meta.keySig, timeSigChange: i === 0, keySigChange: i === 0 });
   }
   const notes: NoteEl[] = [];
   let id = 0;
-  staves.forEach((staff, si) => {
+  staves.forEach((staff, idx) => {
+    const si = staff.staff ?? idx;
+    const voice = staff.voice ?? 0;
     const chords = [...staff.chords].sort((a, b) => a.start - b.start);
     // remove sobreposições (uma voz por pauta)
     for (let i = 0; i < chords.length - 1; i++) {
@@ -51,7 +104,7 @@ export function songFromChords(meta: SongMeta, staves: RawStaff[]): Song {
       // divide em barras de compasso e em figuras representáveis
       let t = start;
       const stop = start + dur;
-      const pieces: { t: number; d: number; dur: string; dots: number }[] = [];
+      const pieces: { t: number; d: number; dur: string; dots: number; tuplet?: { actual: number; normal: number } }[] = [];
       while (t < stop - 1) {
         const mi = Math.min(nMeasures - 1, Math.floor(t / mLen));
         const mEnd = (mi + 1) * mLen;
@@ -63,11 +116,7 @@ export function songFromChords(meta: SongMeta, staves: RawStaff[]): Song {
           t = segEnd;
           continue;
         }
-        let tt = t;
-        for (const p of ticksToDurations(segLen)) {
-          pieces.push({ t: tt, d: p.ticks, dur: p.dur, dots: p.dots });
-          tt += p.ticks;
-        }
+        pieces.push(...splitDur(t, segLen));
         t = segEnd;
       }
       pieces.forEach((p, i) => {
@@ -78,14 +127,18 @@ export function songFromChords(meta: SongMeta, staves: RawStaff[]): Song {
           t: p.t,
           d: p.d,
           staff: si,
-          voice: 0,
+          voice,
           keys: c ? c.pitches : [],
           dur: p.dur,
           dots: p.dots,
+          tuplet: p.tuplet,
           fingers: c && i === 0 ? c.fingers : undefined,
           tieStart: c && i < pieces.length - 1 ? c.pitches.map(() => true) : undefined,
+          vel: c?.vels,
           measure: mi,
           fullRest: full || undefined,
+          // pausas da segunda voz ficam invisíveis
+          hidden: !c && voice > 0 ? true : undefined,
         });
       });
     };
@@ -105,17 +158,18 @@ export function songFromChords(meta: SongMeta, staves: RawStaff[]): Song {
     title: meta.title,
     composer: meta.composer,
     description: meta.description,
-    level: meta.level ?? estimateLevel(notes, meta.tempo, staves.length),
+    level: meta.level ?? estimateLevel(notes, meta.tempo, nStaves),
     source: meta.source,
     tempo: meta.tempo,
     timeSig: meta.timeSig,
     keySig: meta.keySig,
-    staves: staves.length,
-    clefs: staves.map((s) => s.clef),
+    staves: nStaves,
+    clefs,
     measures,
     notes,
-    staffHands: staves.map((s) => s.hand),
+    staffHands,
   };
+  notes.sort((a, b) => a.t - b.t || a.staff - b.staff || a.voice - b.voice);
   resolveTies(song);
   return song;
 }

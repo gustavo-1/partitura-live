@@ -30,6 +30,8 @@ export interface NoteEl {
   measure: number;
   fullRest?: boolean; // pausa de compasso inteiro
   hidden?: boolean; // pausa invisível (preenchimento de voz secundária)
+  /** intensidade de cada nota do acorde (0..1), quando a música importada traz essa informação */
+  vel?: number[];
 }
 
 export interface Measure {
@@ -59,7 +61,14 @@ export interface Song {
   notes: NoteEl[];
   /** mãos presentes: staff 0 => 'R', staff 1 => 'L' (padrão) */
   staffHands?: Hand[];
+  /** trechos com pedal de sustentação [início, fim] em ticks (só afeta o som) */
+  pedal?: [number, number][];
+  /** versão do importador que gerou a música (músicas importadas) */
+  importVersion?: number;
 }
+
+/** Versão atual dos importadores de MIDI/MusicXML (sobe quando a conversão melhora). */
+export const IMPORT_VERSION = 2;
 
 export type Hand = 'R' | 'L';
 
@@ -74,6 +83,10 @@ export interface PlayEvent {
   keyIndex: number;
   finger?: number;
   measure: number;
+  /** intensidade (0..1) */
+  vel?: number;
+  /** quanto a nota soa de fato, com o pedal (ticks); só para o som */
+  sd?: number;
 }
 
 /** Um "passo" de prática: todas as notas que começam no mesmo instante. */

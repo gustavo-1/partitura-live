@@ -64,13 +64,20 @@ export function Waterfall({ lo, hi, notes, timeRef, stateRef, lookahead = 3, sho
     const lane = styles.getPropertyValue('--wf-lane').trim() || 'rgba(255,255,255,0.04)';
     const lineC = styles.getPropertyValue('--wf-line').trim() || 'rgba(255,255,255,0.12)';
 
+    // o desenho das teclas só muda com a faixa/largura: não recalcula a cada quadro
+    let layoutKey = '';
+    let keys: ReturnType<typeof keyboardLayout> = [];
+    let kx = new Map<number, (typeof keys)[number]>();
     const draw = () => {
       const { notes: ns, lo: a, hi: b, lookahead: la, showNames: sn, naming: nm, barTimes: bars } = propsRef.current;
       const W = size.w;
       const H = size.h;
       const t = timeRef.current;
-      const keys = keyboardLayout(a, b, W);
-      const kx = new Map(keys.map((k) => [k.midi, k]));
+      if (layoutKey !== `${a}|${b}|${W}`) {
+        layoutKey = `${a}|${b}|${W}`;
+        keys = keyboardLayout(a, b, W);
+        kx = new Map(keys.map((k) => [k.midi, k]));
+      }
       const pxPerSec = H / la;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.fillStyle = bg;
