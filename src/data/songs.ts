@@ -2,8 +2,11 @@ import { buildSong, type SongSpec } from '../music/notation';
 import type { Song } from '../music/types';
 
 /**
- * Músicas embutidas — todas de domínio público ou tradicionais.
+ * Músicas embutidas — de domínio público, tradicionais ou composições originais do app.
  * Arranjos simplificados para estudo.
+ *
+ * Músicas com direitos autorais (pop atual, trilhas de filmes e séries) não vêm no app:
+ * a pessoa pode importar o arranjo que tiver (MusicXML/MIDI) e ele fica só na conta dela.
  */
 const SPECS: SongSpec[] = [
   {
@@ -38,6 +41,7 @@ const SPECS: SongSpec[] = [
   },
   {
     id: 'ode-alegria',
+    collection: 'classico',
     title: 'Ode à Alegria',
     composer: 'L. van Beethoven (9ª Sinfonia)',
     description: 'O clássico dos iniciantes: posição de Dó com a mão direita.',
@@ -108,6 +112,7 @@ const SPECS: SongSpec[] = [
   },
   {
     id: 'ode-alegria-maos',
+    collection: 'classico',
     title: 'Ode à Alegria (duas mãos)',
     composer: 'L. van Beethoven',
     description: 'Melodia na mão direita e notas longas na esquerda.',
@@ -142,6 +147,7 @@ const SPECS: SongSpec[] = [
   },
   {
     id: 'canone-re',
+    collection: 'classico',
     title: 'Cânone em Ré (tema)',
     composer: 'J. Pachelbel',
     description: 'Armadura com dois sustenidos (Fá♯ e Dó♯) e baixo grave.',
@@ -154,6 +160,7 @@ const SPECS: SongSpec[] = [
   },
   {
     id: 'minueto-sol',
+    collection: 'classico',
     title: 'Minueto em Sol',
     composer: 'C. Petzold (atribuído a J. S. Bach)',
     description: 'Clássico do repertório: colcheias, 3/4 e Fá sustenido.',
@@ -167,6 +174,7 @@ const SPECS: SongSpec[] = [
   },
   {
     id: 'fur-elise',
+    collection: 'classico',
     title: 'Para Elisa (início)',
     composer: 'L. van Beethoven',
     description: 'Semicolcheias em 3/8, arpejos na mão esquerda.',
@@ -178,13 +186,160 @@ const SPECS: SongSpec[] = [
     rh: 'E5s@5 D#5@4 | E5s@5 D#5@4 E5@5 B4@2 D5@4 C5@3 | A4e@1 rs C4s@1 E4@2 A4@3 | B4e@4 rs E4s@1 G#4@3 B4@4 | C5e@5 rs E4s@1 E5@5 D#5@4 | E5s@5 D#5@4 E5@5 B4@2 D5@4 C5@3 | A4e@1 rs C4s@1 E4@2 A4@3 | B4e@4 rs E4s@1 C5@3 B4@2 | A4q.@1',
     lh: 'rs rs | R | A2s@5 E3@2 A3@1 rs re | E2s@5 E3@2 G#3@1 rs re | A2s@5 E3@2 A3@1 rs re | R | A2s@5 E3@2 A3@1 rs re | E2s@5 E3@2 G#3@1 rs re | A2s@5 E3@2 A3@1 rs re',
   },
+  // ---------- clássicos famosos (domínio público) ----------
+  {
+    id: 'manha-grieg',
+    title: 'Manhã (Peer Gynt)',
+    composer: 'E. Grieg',
+    description: 'A melodia do amanhecer que aparece em tantos desenhos. Compasso 6/8 na posição de Dó.',
+    level: 2,
+    tempo: 66,
+    time: '6/8',
+    collection: 'classico',
+    tags: ['duas mãos', '6/8', 'famosa'],
+    rh: 'G4e@4 E4@3 D4@2 C4@1 D4@2 E4@3 | G4e@4 E4@3 D4@2 C4@1 D4@2 E4@3 | D4e@2 E4@3 G4@4 E4@3 G4@4 A4@5 | E4e@3 A4@5 G4@4 E4@3 D4@2 C4@1 | C4h.@1 | G4e@4 E4@3 D4@2 C4@1 D4@2 E4@3 | G4e@4 E4@3 D4@2 C4@1 D4@2 E4@3 | D4e@2 E4@3 G4@4 E4@3 G4@4 A4@5 | E4e@3 A4@5 G4@4 E4@3 D4@2 C4@1 | C4h.@1',
+    lh: '(C3@5 G3@1)h. | (C3 G3)h. | (C3 G3)h. | (C3 G3)h. | (C3 G3)h. | (C3 G3)h. | (C3 G3)h. | (C3 G3)h. | (C3 G3)h. | (C3@5 G3@1)h.',
+  },
+  {
+    id: 'amazing-grace',
+    title: 'Amazing Grace',
+    composer: 'Tradicional (melodia “New Britain”)',
+    description: 'Hino conhecido no mundo todo. 3/4, anacruse e Sol maior.',
+    level: 2,
+    tempo: 84,
+    time: '3/4',
+    key: 1,
+    pickup: true,
+    collection: 'classico',
+    tags: ['duas mãos', '3/4', 'famosa'],
+    rh: 'D4q@1 | G4h@3 B4e@5 G4@3 | B4h@5 A4q@4 | G4h@3 E4q@2 | D4h@1 D4q@1 | G4h@3 B4e@5 G4@3 | B4h@5 A4q@4 | D5h.@5 | D5h@5 B4q@3 | D5h@5 B4e@3 G4@1 | B4h@3 A4q@2 | G4h@2 E4q@1 | D4h@1 D4q@1 | G4h@3 B4e@5 G4@3 | B4h@5 A4q@4 | G4h.@3',
+    lh: 'rq | (G2@5 D3@1)h. | (G2 D3)h. | (C3@5 G3@1)h. | (G2@5 D3@1)h. | (G2 D3)h. | (G2 D3)h. | (D3@5 A3@1)h. | (D3 A3)h. | (G2@5 D3@1)h. | (G2 D3)h. | (C3@5 G3@1)h. | (G2@5 D3@1)h. | (E2@5 B2@1)h. | (D3@5 A3@1)h. | (G2@5 D3@1)h.',
+  },
+  {
+    id: 'greensleeves',
+    title: 'Greensleeves',
+    composer: 'Tradicional inglesa',
+    description: 'Melodia renascentista em lá menor, com o Sol sustenido da escala menor harmônica.',
+    level: 3,
+    tempo: 96,
+    time: '3/4',
+    pickup: true,
+    collection: 'classico',
+    tags: ['duas mãos', '3/4', 'menor'],
+    rh: 'A4q@1 | C5h@2 D5q@3 | E5q.@4 F5e@5 E5q@4 | D5h@3 B4q@2 | G4q.@1 A4e@2 B4q@3 | C5h@4 A4q@2 | A4q.@2 G#4e@1 A4q@2 | B4h@3 G#4q@1 | E4h@1 A4q@1 | C5h@2 D5q@3 | E5q.@4 F5e@5 E5q@4 | D5h@3 B4q@2 | G4q.@1 A4e@2 B4q@3 | C5q.@4 B4e@3 A4q@2 | G#4q.@2 F#4e@1 G#4q@2 | A4h.@3 | G5h.@5 | G5q.@5 F#5e@4 E5q@3 | D5h@2 B4q@1 | G4q.@1 A4e@2 B4q@3 | C5h@4 A4q@2 | A4q.@2 G#4e@1 A4q@2 | B4h@3 G#4q@1 | E4h.@1 | G5h.@5 | G5q.@5 F#5e@4 E5q@3 | D5h@2 B4q@1 | G4q.@1 A4e@2 B4q@3 | C5q.@4 B4e@3 A4q@2 | G#4q.@2 F#4e@1 G#4q@2 | A4h.@3',
+    lh: 'rq | (A2@5 E3@1)h. | (C3@5 G3@1)h. | (G2@5 D3@1)h. | (E2@5 B2@1)h. | (A2@5 E3@1)h. | (F2@5 C3@1)h. | (E2@5 B2@1)h. | (E2 B2)h. | (A2@5 E3@1)h. | (C3@5 G3@1)h. | (G2@5 D3@1)h. | (E2@5 B2@1)h. | (A2@5 E3@1)h. | (E2@5 B2@1)h. | (A2@5 E3@1)h. | (C3@5 G3@1)h. | (E2@5 B2@1)h. | (G2@5 D3@1)h. | (E2@5 B2@1)h. | (A2@5 E3@1)h. | (E2@5 B2@1)h. | (E2 B2)h. | (E2 B2)h. | (C3@5 G3@1)h. | (E2@5 B2@1)h. | (G2@5 D3@1)h. | (E2@5 B2@1)h. | (A2@5 E3@1)h. | (E2@5 B2@1)h. | (A2@5 E3@1)h.',
+  },
+  {
+    id: 'gruta-rei',
+    title: 'Na Gruta do Rei da Montanha (tema)',
+    composer: 'E. Grieg',
+    description: 'O tema misterioso que vai crescendo. Cromatismo (Fá e Dó naturais) sobre um baixo que se repete.',
+    level: 3,
+    tempo: 100,
+    key: 2,
+    collection: 'classico',
+    tags: ['duas mãos', 'cromatismo', 'famosa'],
+    rh: 'B3e@1 C#4@2 D4@3 E4@4 F#4@5 D4@3 F#4q@5 | F4e@4 C#4@2 F4q@4 E4e@3 C4@1 E4q@3 | B3e@1 C#4@2 D4@3 E4@4 F#4@5 D4@3 F#4@5 B4@5 | A4e@4 F#4@3 D4@1 F#4@3 A4h@4 | B4e@1 C#5@2 D5@3 E5@4 F#5@5 D5@3 F#5q@5 | F5e@4 C#5@2 F5q@4 E5e@3 C5@1 E5q@3 | B4e@1 C#5@2 D5@3 E5@4 F#5@5 D5@3 F#5@5 B5@5 | A5e@4 F#5@3 D5@1 F#5@3 A5h@4 | B4w@1',
+    lh: 'B2q@1 F#2@5 B2@1 F#2@5 | B2q F#2 B2 F#2 | B2q F#2 B2 F#2 | B2q F#2 B2 F#2 | B2q F#2 B2 F#2 | B2q F#2 B2 F#2 | B2q F#2 B2 F#2 | B2q F#2 B2 F#2 | (B1@5 B2@1)w',
+  },
+  {
+    id: 'preludio-do-bach',
+    title: 'Prelúdio em Dó (início)',
+    composer: 'J. S. Bach (O Cravo Bem Temperado, BWV 846)',
+    description: 'Acordes quebrados que mudam a cada compasso — ótimo para ler harmonia e relaxar a mão.',
+    level: 3,
+    tempo: 60,
+    collection: 'classico',
+    tags: ['duas mãos', 'arpejos', 'barroco'],
+    rh: 're G4s@1 C5@3 E5@5 G4@1 C5@3 E5@5 re G4s C5 E5 G4 C5 E5 | re A4s@1 D5@3 F5@5 A4 D5 F5 re A4s D5 F5 A4 D5 F5 | re G4s@1 D5@4 F5@5 G4 D5 F5 re G4s D5 F5 G4 D5 F5 | re G4s@1 C5@3 E5@5 G4 C5 E5 re G4s C5 E5 G4 C5 E5 | re A4s@1 E5@4 A5@5 A4 E5 A5 re A4s E5 A5 A4 E5 A5 | re F#4s@1 A4@2 D5@5 F#4 A4 D5 re F#4s A4 D5 F#4 A4 D5 | re G4s@1 D5@3 G5@5 G4 D5 G5 re G4s D5 G5 G4 D5 G5 | re E4s@1 G4@2 C5@5 E4 G4 C5 re E4s G4 C5 E4 G4 C5 | re E4s@1 G4@2 C5@5 E4 G4 C5 re E4s G4 C5 E4 G4 C5 | re D4s@1 F#4@2 C5@5 D4 F#4 C5 re D4s F#4 C5 D4 F#4 C5 | re D4s@1 G4@2 B4@4 D4 G4 B4 re D4s G4 B4 D4 G4 B4 | (E4@1 G4@2 C5@5)w',
+    lh: '(C4@2 E4@1)h (C4 E4)h | (C4@2 D4@1)h (C4 D4)h | (B3@2 D4@1)h (B3 D4)h | (C4@2 E4@1)h (C4 E4)h | (C4@2 E4@1)h (C4 E4)h | (C4@2 D4@1)h (C4 D4)h | (B3@2 D4@1)h (B3 D4)h | (B3@2 C4@1)h (B3 C4)h | (A3@2 C4@1)h (A3 C4)h | (D3@5 A3@1)h (D3 A3)h | (G3@3 B3@1)h (G3 B3)h | (C3@5 G3@1)w',
+  },
+  {
+    id: 'gymnopedie',
+    title: 'Gymnopédie nº 1 (início)',
+    composer: 'E. Satie',
+    description: 'Calma e flutuante: a mão esquerda alterna dois acordes de sétima e a melodia entra no compasso 5.',
+    level: 3,
+    tempo: 76,
+    time: '3/4',
+    key: 2,
+    collection: 'classico',
+    tags: ['duas mãos', '3/4', 'calma'],
+    rh: 'R | R | R | R | rq F#5@3 A5@5 | G5@4 F#5@3 C#5@2 | B4@1 C#5@2 D5@3 | A4h.@1 | F#4h.@1~ | F#4h.~ | F#4h.~ | F#4h.',
+    lh: 'G2q@5 (B2@3 D3@2 F#3@1)h | D2q@5 (A2@3 C#3@2 F#3@1)h | G2q (B2 D3 F#3)h | D2q (A2 C#3 F#3)h | G2q (B2 D3 F#3)h | D2q (A2 C#3 F#3)h | G2q (B2 D3 F#3)h | D2q (A2 C#3 F#3)h | G2q (B2 D3 F#3)h | D2q (A2 C#3 F#3)h | G2q (B2 D3 F#3)h | D2q (A2 C#3 F#3)h',
+  },
+
+  // ---------- no clima do pop e do cinema (composições originais do Partitura Live) ----------
+  {
+    id: 'valsa-luzes',
+    title: 'Valsa das Luzes da Cidade',
+    composer: 'Partitura Live (original)',
+    description: 'Valsa com acordes de sétima, no clima dos musicais de cinema. A mão esquerda faz baixo + acorde (“um-dois-três”).',
+    level: 3,
+    tempo: 112,
+    time: '3/4',
+    collection: 'pop',
+    tags: ['duas mãos', '3/4', 'jazz', 'cinema'],
+    rh: 'A4q@1 C5@2 E5@4 | D5h.@3 | G4q@1 B4@2 D5@4 | C5h.@3 | F4q@1 A4@2 C5@4 | B4q.@3 A4e@2 G4q@1 | A4h.@2 | rq E5q@4 D5q@3 | C5q@2 E5@4 G5@5 | F5h@4 E5q@3 | D5q@2 F5@4 A4@1 | B4h.@2 | C5q@3 E5@5 B4@2 | A4q.@3 G4e@2 F4q@1 | G4h@2 B4q@4 | C5h.@5',
+    lh: 'A2q@5 (C3@3 G3@1)h | D3q@5 (F3@3 C4@1)h | G2q@5 (F3@2 B3@1)h | C3q@5 (E3@3 B3@1)h | F2q@5 (A2@3 E3@1)h | E2q@5 (G2@3 D3@1)h | A2q@5 (C3@3 G3@1)h | E2q@5 (G#2@3 D3@1)h | C3q@5 (E3@3 B3@1)h | F2q@5 (A2@3 E3@1)h | D3q@5 (F3@3 C4@1)h | G2q@5 (F3@2 B3@1)h | C3q@5 (E3@3 B3@1)h | F2q@5 (A2@3 E3@1)h | G2q@5 (F3@2 B3@1)h | (C3@5 G3@1)h.',
+  },
+  {
+    id: 'sussurro',
+    title: 'Sussurro',
+    composer: 'Partitura Live (original)',
+    description: 'Balada lenta e sombria em mi menor, no clima do pop intimista atual. Toque baixinho, quase falando.',
+    level: 2,
+    tempo: 66,
+    key: 1,
+    collection: 'pop',
+    tags: ['duas mãos', 'menor', 'balada'],
+    rh: 'rq B4e@4 B4 B4q A4e@3 G4@2 | G4q.@3 F#4e@2 E4h@1 | rq E4e@1 G4@2 A4q@3 C5@5 | B4h@4 A4q@3 D#4q@1 | rq B4e@4 B4 D5q@5 B4e@4 A4@3 | G4h@2 E4h@1 | A4q.@2 B4e@3 C5q@4 B4q@3 | B4w@3 | E5q.@5 D5e@4 B4h@2 | C5q@3 B4@2 G4h@1 | A4q@3 G4@2 F#4q.@1 D#4e@1 | E4w@1',
+    lh: '(E3@5 G3@3 B3@1)w | (C3@5 E3@3 G3@1)w | (A2@5 C3@3 E3@1)w | (B2@5 D#3@3 F#3@1)w | (E3@5 G3@3 B3@1)w | (C3@5 E3@3 G3@1)w | (A2@5 C3@3 E3@1)w | (B2@5 D#3@3 F#3@1)w | (E3@5 G3@3 B3@1)w | (C3@5 E3@3 G3@1)w | (A2@5 C3@3 E3@1)h (B2@5 D#3@3 F#3@1)h | (E3@5 G3@3 B3@1)w',
+  },
+  {
+    id: 'verao-sem-fim',
+    title: 'Verão Sem Fim',
+    composer: 'Partitura Live (original)',
+    description: 'Tema animado e saltitante, no clima dos desenhos de aventura. Colcheias, pausas e baixo pulando.',
+    level: 3,
+    tempo: 132,
+    key: 1,
+    collection: 'pop',
+    tags: ['duas mãos', 'colcheias', 'animada'],
+    rh: 'G4e@1 B4@2 D5@3 B4@2 G5q@5 D5q@3 | E5e@4 E5@4 rq E5e@4 D5@3 C5q@2 | B4e@2 D5@3 G5q@5 D5e@3 B4@2 G4q@1 | A4e@1 B4@2 C5@3 D5@1 E5q@2 F#5q@3 | G5q.@5 D5e@3 B4q@2 G4q@1 | E5e@3 G5@5 E5@3 C5@1 E5q@3 G5q@5 | F#5e@5 E5@4 D5@3 C5@2 B4q@1 A4q@1 | G4q@1 D5@3 G5h@5 | G4e@1 B4@2 D5@3 B4@2 G5q@5 D5q@3 | E5e@4 E5@4 rq E5e@4 D5@3 C5q@2 | B4e@2 D5@3 G5q@5 D5e@3 B4@2 G4q@1 | A4e@1 B4@2 C5@3 D5@1 E5q@2 F#5q@3 | G5q.@5 F#5e@4 E5q@3 D5q@2 | C5e@1 E5@2 G5@4 E5@2 C5q@1 E5q@2 | D5e@2 C5@1 B4@1 A4@1 D5q@3 F#5q@5 | G5q@5 D5@3 (B4@1 D5@2 G5@5)h',
+    lh: 'G2q@5 D3@2 G2@5 D3@2 | C3q@5 G3@1 C3@5 G3@1 | G2q@5 D3@2 G2@5 D3@2 | D3q@5 A3@1 D3@5 A3@1 | G2q@5 D3@2 G2@5 D3@2 | C3q@5 G3@1 C3@5 G3@1 | D3q@5 A3@1 D3@5 A3@1 | G2q@5 D3@2 G2h@5 | G2q@5 D3@2 G2@5 D3@2 | C3q@5 G3@1 C3@5 G3@1 | G2q@5 D3@2 G2@5 D3@2 | D3q@5 A3@1 D3@5 A3@1 | E2q@5 B2@1 E2@5 B2@1 | C3q@5 G3@1 C3@5 G3@1 | D3q@5 A3@1 D3@5 A3@1 | G2q@5 D3@2 G2h@5',
+  },
+  {
+    id: 'carta-nao-enviada',
+    title: 'Carta Não Enviada',
+    composer: 'Partitura Live (original)',
+    description: 'Balada pop ao piano com a progressão mais usada das paradas (Dó–Sol–Lá menor–Fá). A esquerda toca acordes quebrados.',
+    level: 3,
+    tempo: 76,
+    collection: 'pop',
+    tags: ['duas mãos', 'balada', 'pop'],
+    rh: 'rq E4e@3 E4 E4q D4e@2 C4@1 | D4q.@2 E4e@3 D4h@2 | rq E4e@3 E4 G4q@5 E4e@3 C4@1 | D4q.@2 C4e@1 C4h@1 | rq G4e@3 G4 G4q A4e@4 G4@3 | G4q.@3 F4e@2 E4q@1 D4q@1 | E4q.@2 D4e@1 C4q@1 E4q@3 | D4h@2 D4e@2 E4@3 F4q@4 | G4q.@5 E4e@3 G4q@5 C5q@5 | B4q.@4 A4e@3 G4h@2 | A4q.@3 G4e@2 E4q@1 A4q@4 | G4h.@3 F4e@2 E4@1 | E4q.@3 D4e@2 C4q@1 E4q@3 | D4q.@2 E4e@3 F4q@4 D4q@2 | C4h@1 D4h@2 | C4w@1',
+    lh: 'C3q@5 G3@2 C4@1 G3@2 | G2q@5 D3@2 G3@1 D3@2 | A2q@5 E3@2 A3@1 E3@2 | F2q@5 C3@2 F3@1 C3@2 | C3q@5 G3@2 C4@1 G3@2 | G2q@5 D3@2 G3@1 D3@2 | A2q@5 E3@2 A3@1 E3@2 | F2q@5 C3@2 F3@1 C3@2 | C3q@5 G3@2 C4@1 G3@2 | G2q@5 D3@2 G3@1 D3@2 | A2q@5 E3@2 A3@1 E3@2 | F2q@5 C3@2 F3@1 C3@2 | C3q@5 G3@2 C4@1 G3@2 | G2q@5 D3@2 G3@1 D3@2 | F2q@5 C3@2 G2q@4 D3@1 | (C3@5 G3@2 C4@1)w',
+  },
 ];
+
+/** Especificações das músicas embutidas (para testes). */
+export function builtinSpecs(): readonly SongSpec[] {
+  return SPECS;
+}
 
 let cache: Song[] | null = null;
 
 export function builtinSongs(): Song[] {
   if (!cache) cache = SPECS.map((s) => buildSong({ ...s, source: 'builtin' }));
   return cache;
+}
+
+export type SongCollection = 'folclore' | 'classico' | 'pop';
+
+/** Coleção de uma música embutida (para os filtros da biblioteca). */
+export function songCollection(id: string): SongCollection {
+  return SPECS.find((s) => s.id === id)?.collection ?? 'folclore';
 }
 
 export function builtinSong(id: string): Song | undefined {

@@ -29,6 +29,8 @@ export interface SongSpec {
   source?: Song['source'];
   /** o primeiro compasso é anacruse (incompleto) */
   pickup?: boolean;
+  /** coleção na biblioteca (músicas embutidas) */
+  collection?: 'folclore' | 'classico' | 'pop';
 }
 
 const DUR_LETTER: Record<string, string> = { w: 'w', h: 'h', q: 'q', e: '8', s: '16', t: '32' };

@@ -2719,3 +2719,20 @@ body:has(.chat) .badge-toast {
     opacity: 0;
   }
 }
+.favorites-card {
+  margin-top: 16px;
+  background: linear-gradient(135deg, color-mix(in srgb, #ec4899 9%, var(--surface)), var(--surface));
+}
+.fav-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 10px 16px;
+}
+.fav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+a.chip-btn {
+  color: var(--ink);
+}

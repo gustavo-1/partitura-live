@@ -1,8 +1,26 @@
 import { describe, expect, it } from 'vitest';
-import { builtinSongs } from '../src/data/songs';
+import { builtinSongs, builtinSpecs } from '../src/data/songs';
+import { parseHand } from '../src/music/notation';
+import { DUR_TICKS, measureTicks } from '../src/music/theory';
 import { buildEvents } from '../src/music/timeline';
 
 describe('músicas embutidas', () => {
+  it('cada compasso de cada mão soma a duração da fórmula de compasso', () => {
+    for (const spec of builtinSpecs()) {
+      const full = measureTicks((spec.time ?? '4/4').split('/').map(Number) as [number, number]);
+      const hands = [spec.rh, spec.lh].filter((x): x is string => !!x).map(parseHand);
+      const n = Math.max(...hands.map((h) => h.length));
+      hands.forEach((ms, hi) => {
+        expect(ms.length, `${spec.id}: número de compassos da mão ${hi}`).toBe(n);
+        ms.forEach((evs, i) => {
+          const sum = evs.reduce((a, e) => a + (e.fullRest ? full : DUR_TICKS[e.dur] * (2 - 1 / 2 ** e.dots)), 0);
+          if (i === 0 && spec.pickup) expect(sum, `${spec.id}: anacruse`).toBeLessThan(full);
+          else expect(sum, `${spec.id} compasso ${i + 1} (mão ${hi})`).toBe(full);
+        });
+      });
+    }
+  });
+
   it('todas compilam e têm compassos completos', () => {
     const songs = builtinSongs();
     expect(songs.length).toBeGreaterThan(10);

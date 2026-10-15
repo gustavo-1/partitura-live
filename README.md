@@ -141,6 +141,16 @@ Projeto `partitura-live-2jo`, já com app web registrado (configuração públic
 
 ---
 
+## Músicas
+
+O app traz 26 músicas prontas, em três coleções:
+
+- **🎧 Pop e cinema** — peças **originais** do Partitura Live no clima de musicais de cinema (*Valsa das Luzes da Cidade*), do pop intimista (*Sussurro*), dos desenhos de aventura (*Verão Sem Fim*) e das baladas pop ao piano (*Carta Não Enviada*).
+- **🎻 Clássicos famosos** — Para Elisa, Cânone em Ré, Prelúdio em Dó (Bach), Gymnopédie nº 1, Manhã (Grieg), Na Gruta do Rei da Montanha, Greensleeves, Amazing Grace, Minueto em Sol, Ode à Alegria.
+- **🧸 Infantis e folclóricas** — para os primeiros passos.
+
+Músicas atuais (La La Land, Billie Eilish, Olivia Rodrigo, temas de séries…) têm direitos autorais e por isso não vêm embutidas num app público. A biblioteca tem atalhos de busca para elas: baixe um arranjo em MusicXML ou MIDI e importe — ele fica só na sua conta, com plano de estudo, modo espera e cascata.
+
 ## Onde achar partituras
 
 - **MuseScore** (musescore.com / MuseScore Studio, gratuito): abra a partitura e use *Exportar → MusicXML*.

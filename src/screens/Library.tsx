@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { builtinSongs } from '../data/songs';
+import { builtinSongs, songCollection, type SongCollection } from '../data/songs';
 import { deleteImported, listImported, onLibraryChange, saveImported, type ImportedRecord } from '../data/library';
 import type { Song } from '../music/types';
 import { useStore } from '../lib/store';
@@ -10,11 +10,29 @@ import { Seg } from '../components/ui';
 import { handsInSong } from '../music/timeline';
 
 type Filter = 'all' | '1' | '2' | '3' | '4';
+type Coll = 'all' | SongCollection;
+
+const COLLECTIONS: { value: Coll; label: string }[] = [
+  { value: 'all', label: 'Todas' },
+  { value: 'pop', label: '🎧 Pop e cinema' },
+  { value: 'classico', label: '🎻 Clássicos famosos' },
+  { value: 'folclore', label: '🧸 Infantis e folclóricas' },
+];
+
+/** Buscas prontas para quem quer tocar músicas atuais (com direitos autorais: a pessoa importa o arranjo). */
+const FAVORITES: { artist: string; songs: string[] }[] = [
+  { artist: 'La La Land', songs: ['City of Stars', "Mia and Sebastian's Theme", 'Another Day of Sun'] },
+  { artist: 'Billie Eilish', songs: ['lovely', 'What Was I Made For', 'ocean eyes'] },
+  { artist: 'Phineas e Ferb', songs: ['Phineas and Ferb theme', 'Gitchee Gitchee Goo'] },
+  { artist: 'Olivia Rodrigo', songs: ['drivers license', 'traitor', 'vampire'] },
+];
+const searchUrl = (q: string) => `https://musescore.com/sheetmusic?text=${encodeURIComponent(q + ' easy piano')}`;
 
 export function Library() {
   const p = useStore(progress);
   const [imported, setImported] = useState<ImportedRecord[]>([]);
   const [filter, setFilter] = useState<Filter>('all');
+  const [coll, setColl] = useState<Coll>('all');
   const [query, setQuery] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -57,9 +75,15 @@ export function Library() {
     }
   };
 
+  const q = query.trim().toLowerCase();
   const songs = builtinSongs().filter(
-    (s) => (filter === 'all' || String(Math.min(4, s.level)) === filter) && (!query || s.title.toLowerCase().includes(query.toLowerCase())),
+    (s) =>
+      (filter === 'all' || String(Math.min(4, s.level)) === filter) &&
+      (coll === 'all' || songCollection(s.id) === coll) &&
+      (!q || s.title.toLowerCase().includes(q) || (s.composer ?? '').toLowerCase().includes(q)),
   );
+  // quem procura uma música pop que não vem no app vê como importá-la
+  const lookingForPop = !!q && songs.length === 0;
 
   return (
     <div>
@@ -71,7 +95,15 @@ export function Library() {
         o andamento original.
       </p>
 
-      <div className="row" style={{ margin: '14px 0' }}>
+      <div className="chip-choices" role="radiogroup" aria-label="Coleção" style={{ marginTop: 14 }}>
+        {COLLECTIONS.map((c) => (
+          <button key={c.value} role="radio" aria-checked={coll === c.value} className={'chip-btn' + (coll === c.value ? ' on' : '')} onClick={() => setColl(c.value)}>
+            {c.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="row" style={{ margin: '12px 0 14px' }}>
         <input placeholder="Buscar…" value={query} onChange={(e) => setQuery(e.target.value)} style={{ flex: '1 1 180px' }} aria-label="Buscar música" />
         <Seg<Filter>
           value={filter}
@@ -86,11 +118,48 @@ export function Library() {
         />
       </div>
 
+      {songs.length === 0 && <p className="small muted">Nenhuma música embutida com esse filtro.</p>}
       <div className="grid cols-2">
         {songs.map((s) => (
           <SongCard key={s.id} song={s} best={p.songs[s.id]?.best} />
         ))}
       </div>
+
+      {(coll === 'pop' || coll === 'all' || lookingForPop) && (
+        <div className="card favorites-card">
+          <h3 style={{ marginTop: 0 }}>🎬 Quer tocar La La Land, Billie Eilish, Olivia Rodrigo…?</h3>
+          <p className="small muted">
+            Músicas atuais de artistas, filmes e séries têm direitos autorais, por isso não vêm no app. Mas você pode tocá-las aqui: baixe um
+            arranjo em <b>MusicXML</b> ou <b>MIDI</b> (no MuseScore, por exemplo — procure “easy piano”) e importe. Ele ganha plano de estudo, modo
+            espera, cascata e fica salvo só na sua conta.
+          </p>
+          {lookingForPop && (
+            <a className="btn sm primary" href={searchUrl(query.trim())} target="_blank" rel="noopener noreferrer" style={{ marginBottom: 10 }}>
+              Procurar “{query.trim()}” no MuseScore ↗
+            </a>
+          )}
+          <div className="fav-groups">
+            {FAVORITES.map((g) => (
+              <div key={g.artist} className="fav-group">
+                <b className="small">{g.artist}</b>
+                <div className="chip-choices">
+                  {g.songs.map((t) => (
+                    <a key={t} className="chip-btn" href={searchUrl(t)} target="_blank" rel="noopener noreferrer">
+                      {t} ↗
+                    </a>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="row" style={{ marginTop: 12 }}>
+            <button className="btn primary sm" onClick={() => fileRef.current?.click()}>
+              <Icon name="upload" /> Importar arquivo baixado
+            </button>
+            <span className="tiny muted">Enquanto isso, experimente as peças originais “no clima” do pop e do cinema acima.</span>
+          </div>
+        </div>
+      )}
 
       <div className="section-title">
         <h2>Suas músicas</h2>

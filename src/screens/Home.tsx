@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { allLessons, findLesson } from '../data/curriculum';
-import { builtinSongs } from '../data/songs';
+import { builtinSongs, songCollection } from '../data/songs';
 import { useStore } from '../lib/store';
 import { progress, streakNow } from '../state/progress';
 import { settings } from '../state/settings';
@@ -82,8 +82,15 @@ export function Home() {
     });
   }, [p.songs]);
 
-  const suggestions = builtinSongs()
+  // sugestões: as mais fáceis ainda não tocadas, com pelo menos uma de cada coleção
+  const unplayed = builtinSongs()
     .filter((s) => !p.songs[s.id])
+    .sort((a, b) => a.level - b.level);
+  const suggestions = [
+    ...(['folclore', 'pop', 'classico'] as const).map((c) => unplayed.find((s) => songCollection(s.id) === c)).filter((s): s is Song => !!s),
+    ...unplayed,
+  ]
+    .filter((s, i, arr) => arr.indexOf(s) === i)
     .slice(0, 4);
   const firstTime = done === 0 && Object.keys(p.songs).length === 0;
   const name = signedIn ? (soc.me?.name ?? acc.user!.name).split(' ')[0] : '';
